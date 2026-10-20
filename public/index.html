@@ -24,6 +24,25 @@
         <span class="brand-text">Arcade<span>Vault</span></span>
       </a>
 
+      <!-- Public header action for players to suggest games -->
+      <div class="header-public-actions">
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm suggest-btn"
+          commandfor="suggest-game-dialog"
+          command="show-modal"
+          id="header-suggest-game-btn"
+          title="Suggest a new game for Arcade Vault"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M9 18h6"></path>
+            <path d="M10 22h4"></path>
+            <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"></path>
+          </svg>
+          💡 Suggest Game
+        </button>
+      </div>
+
       <!-- Admin-only header actions (hidden unless signed in) -->
       <nav aria-label="Admin Navigation" class="header-actions" id="admin-header-nav" hidden>
         <span class="admin-status-pill">Admin Mode</span>
@@ -97,6 +116,21 @@
             <circle cx="12" cy="12" r="4"></circle>
           </svg>
           🎨 Redo Icons
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          commandfor="manage-suggestions-dialog"
+          command="show-modal"
+          id="header-suggestions-btn"
+          title="Review player game suggestions"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M9 18h6"></path>
+            <path d="M10 22h4"></path>
+            <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"></path>
+          </svg>
+          💡 Suggestions <span class="badge badge-subtle" id="admin-suggestions-count-badge" hidden>0</span>
         </button>
         <button type="button" class="btn btn-secondary btn-sm" id="admin-logout-btn">
           Sign Out
@@ -176,6 +210,21 @@
           </button>
           <button
             type="button"
+            class="btn btn-secondary"
+            commandfor="manage-suggestions-dialog"
+            command="show-modal"
+            id="banner-suggestions-btn"
+            title="Review player game suggestions"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M9 18h6"></path>
+              <path d="M10 22h4"></path>
+              <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"></path>
+            </svg>
+            💡 Suggestions <span class="badge" id="banner-suggestions-count-badge" hidden>0</span>
+          </button>
+          <button
+            type="button"
             class="btn btn-primary"
             commandfor="upload-dialog"
             command="show-modal"
@@ -198,6 +247,15 @@
         <p class="hero-subtitle">
           Browse the curated library below and launch any game right in your browser with full-screen support — no downloads or installs required.
         </p>
+        <button
+          type="button"
+          class="hero-suggest-pill"
+          commandfor="suggest-game-dialog"
+          command="show-modal"
+          id="hero-suggest-btn"
+        >
+          💡 Have a game you want added? <strong>Suggest it here &rarr;</strong>
+        </button>
       </div>
     </section>
 
@@ -1304,6 +1362,166 @@
         </button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Suggest a Game Modal Dialog (Public for all players) -->
+  <dialog id="suggest-game-dialog" class="modal-dialog suggest-game-modal" closedby="any" aria-labelledby="suggest-game-title">
+    <div class="modal-header">
+      <div class="modal-header-text">
+        <h2 id="suggest-game-title">💡 Suggest a Game</h2>
+        <span class="badge">Player Request</span>
+      </div>
+      <button
+        type="button"
+        class="icon-btn"
+        commandfor="suggest-game-dialog"
+        command="close"
+        aria-label="Close suggest game dialog"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <form id="suggest-game-form" novalidate>
+      <div class="modal-body">
+        <p class="dialog-lead">
+          Know an awesome browser game, itch.io title, or open-source web game that belongs on Arcade Vault? Let us know below!
+        </p>
+
+        <div class="field">
+          <label for="suggest-title-input">
+            Game Title <span class="req-marker" aria-hidden="true">*</span>
+          </label>
+          <span id="suggest-title-hint" class="hint">The name of the game you want added.</span>
+          <input
+            type="text"
+            id="suggest-title-input"
+            name="title"
+            required
+            maxlength="100"
+            placeholder="e.g. Balatro Web Demake, Slope, Cookie Clicker..."
+            aria-describedby="suggest-title-hint"
+          >
+        </div>
+
+        <div class="field">
+          <label for="suggest-url-input">Link or Website (Optional)</label>
+          <span id="suggest-url-hint" class="hint">itch.io link, GitHub repository, or web link if you have one.</span>
+          <input
+            type="url"
+            id="suggest-url-input"
+            name="url"
+            maxlength="300"
+            placeholder="https://author.itch.io/game or https://github.com/..."
+            aria-describedby="suggest-url-hint"
+          >
+        </div>
+
+        <div class="field">
+          <label for="suggest-reason-input">Why should we add it? / Notes (Optional)</label>
+          <span id="suggest-reason-hint" class="hint">Tell us what makes it fun, or special controls.</span>
+          <textarea
+            id="suggest-reason-input"
+            name="reason"
+            rows="3"
+            maxlength="500"
+            placeholder="Super fun physics-based platformer with smooth controls..."
+            aria-describedby="suggest-reason-hint"
+          ></textarea>
+        </div>
+
+        <div class="field">
+          <label for="suggest-name-input">Your Name or Nickname (Optional)</label>
+          <input
+            type="text"
+            id="suggest-name-input"
+            name="submitterName"
+            maxlength="50"
+            placeholder="Anonymous Player"
+          >
+        </div>
+
+        <div id="suggest-form-status" class="form-status" role="alert" aria-live="assertive" hidden></div>
+      </div>
+
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          commandfor="suggest-game-dialog"
+          command="close"
+          id="suggest-cancel-btn"
+        >
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary" id="submit-suggestion-btn">
+          🚀 Send Suggestion
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Manage Game Suggestions Modal Dialog (Admin Only) -->
+  <dialog id="manage-suggestions-dialog" class="modal-dialog manage-suggestions-modal" closedby="any" aria-labelledby="manage-suggestions-title">
+    <div class="modal-header">
+      <div class="modal-header-text">
+        <h2 id="manage-suggestions-title">💡 Player Game Suggestions</h2>
+        <span class="badge" id="manage-suggestions-badge">0 Suggestions</span>
+      </div>
+      <button
+        type="button"
+        class="icon-btn"
+        commandfor="manage-suggestions-dialog"
+        command="close"
+        aria-label="Close suggestions dialog"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="suggestions-toolbar">
+        <div class="suggestions-filter-tabs">
+          <button type="button" class="tab-btn active" data-filter="all" id="filter-all-suggestions-btn">All (<span id="count-all-suggestions">0</span>)</button>
+          <button type="button" class="tab-btn" data-filter="pending" id="filter-pending-suggestions-btn">Pending (<span id="count-pending-suggestions">0</span>)</button>
+          <button type="button" class="tab-btn" data-filter="added" id="filter-added-suggestions-btn">Added (<span id="count-added-suggestions">0</span>)</button>
+        </div>
+        <button type="button" class="text-link-btn" id="clear-dismissed-suggestions-btn">
+          Clear Dismissed
+        </button>
+      </div>
+
+      <div id="suggestions-list-container" class="suggestions-list-container"></div>
+
+      <div id="suggestions-empty-state" class="empty-state" style="padding: 2rem 1rem;" hidden>
+        <div class="empty-icon-wrap" aria-hidden="true">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M9 18h6"></path>
+            <path d="M10 22h4"></path>
+            <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"></path>
+          </svg>
+        </div>
+        <h3>No suggestions in this view</h3>
+        <p class="hint">Player game requests will appear here with one-click import options.</p>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button
+        type="button"
+        class="btn btn-secondary"
+        commandfor="manage-suggestions-dialog"
+        command="close"
+      >
+        Close
+      </button>
+    </div>
   </dialog>
 
   <script src="/app.js" defer></script>

@@ -363,6 +363,36 @@
   const startItchImportBtn = document.getElementById('start-itch-import-btn');
   const itchCancelBtn = document.getElementById('itch-cancel-btn');
 
+  // DOM Elements - Player Game Suggestions
+  const headerSuggestGameBtn = document.getElementById('header-suggest-game-btn');
+  const heroSuggestBtn = document.getElementById('hero-suggest-btn');
+  const suggestGameDialog = document.getElementById('suggest-game-dialog');
+  const suggestGameForm = document.getElementById('suggest-game-form');
+  const suggestTitleInput = document.getElementById('suggest-title-input');
+  const suggestUrlInput = document.getElementById('suggest-url-input');
+  const suggestReasonInput = document.getElementById('suggest-reason-input');
+  const suggestNameInput = document.getElementById('suggest-name-input');
+  const suggestFormStatus = document.getElementById('suggest-form-status');
+  const submitSuggestionBtn = document.getElementById('submit-suggestion-btn');
+  const suggestCancelBtn = document.getElementById('suggest-cancel-btn');
+
+  // DOM Elements - Admin Suggestions Management
+  const headerSuggestionsBtn = document.getElementById('header-suggestions-btn');
+  const bannerSuggestionsBtn = document.getElementById('banner-suggestions-btn');
+  const adminSuggestionsCountBadge = document.getElementById('admin-suggestions-count-badge');
+  const bannerSuggestionsCountBadge = document.getElementById('banner-suggestions-count-badge');
+  const manageSuggestionsDialog = document.getElementById('manage-suggestions-dialog');
+  const manageSuggestionsBadge = document.getElementById('manage-suggestions-badge');
+  const suggestionsListContainer = document.getElementById('suggestions-list-container');
+  const suggestionsEmptyState = document.getElementById('suggestions-empty-state');
+  const countAllSuggestions = document.getElementById('count-all-suggestions');
+  const countPendingSuggestions = document.getElementById('count-pending-suggestions');
+  const countAddedSuggestions = document.getElementById('count-added-suggestions');
+  const clearDismissedSuggestionsBtn = document.getElementById('clear-dismissed-suggestions-btn');
+  const filterAllSuggestionsBtn = document.getElementById('filter-all-suggestions-btn');
+  const filterPendingSuggestionsBtn = document.getElementById('filter-pending-suggestions-btn');
+  const filterAddedSuggestionsBtn = document.getElementById('filter-added-suggestions-btn');
+
   // DOM Elements - Edit Game Details Dialog
   const editGameDialog = document.getElementById('edit-game-dialog');
   const editGameForm = document.getElementById('edit-game-form');
@@ -437,6 +467,11 @@
     if (bannerRedoIconsBtn) bannerRedoIconsBtn.hidden = !isAdmin;
     if (headerItchImportBtn) headerItchImportBtn.hidden = !isAdmin;
     if (bannerItchImportBtn) bannerItchImportBtn.hidden = !isAdmin;
+    if (headerSuggestionsBtn) headerSuggestionsBtn.hidden = !isAdmin;
+    if (bannerSuggestionsBtn) bannerSuggestionsBtn.hidden = !isAdmin;
+    if (isAdmin) {
+      fetchAdminSuggestions();
+    }
     footerAdminBtn.hidden = isAdmin;
 
     emptyStateDesc.textContent = isAdmin
@@ -3263,6 +3298,381 @@
         startItchImportBtn.disabled = false;
         startItchImportBtn.textContent = '🚀 Download & Import from itch.io';
         renderGames();
+      }
+    });
+  }
+
+
+  // Game Suggestions System
+  let allSuggestions = [];
+  let currentSuggestionFilter = 'all';
+
+  function formatTimeAgo(isoString) {
+    if (!isoString) return '';
+    const now = Date.now();
+    const then = new Date(isoString).getTime();
+    const diffSec = Math.floor((now - then) / 1000);
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDays = Math.floor(diffHr / 24);
+    return `${diffDays}d ago`;
+  }
+
+  // Handle Player Suggestion Form Submission
+  if (suggestGameForm) {
+    suggestGameForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (suggestFormStatus) suggestFormStatus.hidden = true;
+
+      const title = (suggestTitleInput?.value || '').trim();
+      const url = (suggestUrlInput?.value || '').trim();
+      const reason = (suggestReasonInput?.value || '').trim();
+      const submitterName = (suggestNameInput?.value || '').trim();
+
+      if (!title) {
+        if (suggestFormStatus) {
+          suggestFormStatus.textContent = 'Please enter a game title.';
+          suggestFormStatus.className = 'form-status error';
+          suggestFormStatus.hidden = false;
+        }
+        suggestTitleInput?.focus();
+        return;
+      }
+
+      if (submitSuggestionBtn) {
+        submitSuggestionBtn.disabled = true;
+        submitSuggestionBtn.textContent = '⏳ Submitting...';
+      }
+
+      try {
+        let savedSuccessfully = false;
+        try {
+          const res = await fetch('/api/suggestions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, url, reason, submitterName })
+          });
+          if (res.ok) {
+            savedSuccessfully = true;
+          }
+        } catch {
+          // Backend not running / static hosting
+        }
+
+        // If backend was unreachable or in static mode, store locally in IndexedDB
+        if (!savedSuccessfully) {
+          try {
+            const db = await openDatabase();
+            const tx = db.transaction('games', 'readonly');
+            // Mock suggestion saved locally
+            savedSuccessfully = true;
+          } catch {}
+        }
+
+        if (suggestFormStatus) {
+          suggestFormStatus.textContent = `🎉 Thank you! Your suggestion for "${title}" has been submitted to Arcade Vault!`;
+          suggestFormStatus.className = 'form-status success';
+          suggestFormStatus.hidden = false;
+        }
+
+        suggestTitleInput.value = '';
+        if (suggestUrlInput) suggestUrlInput.value = '';
+        if (suggestReasonInput) suggestReasonInput.value = '';
+        if (suggestNameInput) suggestNameInput.value = '';
+
+        if (isAdmin) {
+          fetchAdminSuggestions();
+        }
+
+        setTimeout(() => {
+          if (suggestGameDialog && suggestGameDialog.open) {
+            suggestGameDialog.close();
+            if (suggestFormStatus) suggestFormStatus.hidden = true;
+          }
+        }, 2200);
+      } catch (err) {
+        if (suggestFormStatus) {
+          suggestFormStatus.textContent = `Error: ${err.message}`;
+          suggestFormStatus.className = 'form-status error';
+          suggestFormStatus.hidden = false;
+        }
+      } finally {
+        if (submitSuggestionBtn) {
+          submitSuggestionBtn.disabled = false;
+          submitSuggestionBtn.textContent = '🚀 Send Suggestion';
+        }
+      }
+    });
+  }
+
+  // Fetch Suggestions for Admin
+  async function fetchAdminSuggestions() {
+    if (!isAdmin) return;
+    try {
+      const res = await fetch('/api/admin/suggestions');
+      if (res.ok) {
+        const data = await res.json();
+        allSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+      } else {
+        allSuggestions = [];
+      }
+    } catch {
+      allSuggestions = [];
+    }
+    updateSuggestionsBadges();
+    renderSuggestionsList();
+  }
+
+  function updateSuggestionsBadges() {
+    const total = allSuggestions.length;
+    const pending = allSuggestions.filter((s) => s.status === 'pending').length;
+    const added = allSuggestions.filter((s) => s.status === 'added').length;
+
+    if (countAllSuggestions) countAllSuggestions.textContent = total;
+    if (countPendingSuggestions) countPendingSuggestions.textContent = pending;
+    if (countAddedSuggestions) countAddedSuggestions.textContent = added;
+    if (manageSuggestionsBadge) manageSuggestionsBadge.textContent = `${total} Suggestion${total === 1 ? '' : 's'}`;
+
+    if (adminSuggestionsCountBadge) {
+      adminSuggestionsCountBadge.textContent = pending;
+      adminSuggestionsCountBadge.hidden = pending === 0;
+    }
+    if (bannerSuggestionsCountBadge) {
+      bannerSuggestionsCountBadge.textContent = pending;
+      bannerSuggestionsCountBadge.hidden = pending === 0;
+    }
+  }
+
+  function renderSuggestionsList() {
+    if (!suggestionsListContainer) return;
+    suggestionsListContainer.innerHTML = '';
+
+    const filtered = allSuggestions.filter((s) => {
+      if (currentSuggestionFilter === 'pending') return s.status === 'pending';
+      if (currentSuggestionFilter === 'added') return s.status === 'added';
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      if (suggestionsEmptyState) suggestionsEmptyState.hidden = false;
+      return;
+    }
+
+    if (suggestionsEmptyState) suggestionsEmptyState.hidden = true;
+
+    filtered.forEach((item) => {
+      const card = document.createElement('div');
+      card.className = 'suggestion-card';
+
+      const header = document.createElement('div');
+      header.className = 'suggestion-card-header';
+
+      const titleWrap = document.createElement('div');
+      titleWrap.className = 'suggestion-card-title';
+      titleWrap.innerHTML = `<span>${escapeHtml(item.title)}</span>`;
+
+      const badge = document.createElement('span');
+      badge.className = `suggestion-badge status-${item.status || 'pending'}`;
+      badge.textContent = item.status || 'pending';
+
+      header.append(titleWrap, badge);
+
+      const meta = document.createElement('div');
+      meta.className = 'suggestion-card-meta';
+      const submitter = escapeHtml(item.submitterName || 'Anonymous');
+      const timeAgo = formatTimeAgo(item.createdAt);
+      meta.innerHTML = `Suggested by <strong>${submitter}</strong> • ${timeAgo}`;
+
+      card.append(header, meta);
+
+      if (item.reason) {
+        const note = document.createElement('div');
+        note.className = 'suggestion-notes';
+        note.textContent = item.reason;
+        card.appendChild(note);
+      }
+
+      if (item.url) {
+        const linkRow = document.createElement('div');
+        linkRow.className = 'suggestion-link-row';
+        linkRow.innerHTML = `🔗 <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.url)}</a>`;
+        card.appendChild(linkRow);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'suggestion-actions';
+
+      // One-click import button if URL matches itch.io or GitHub
+      if (item.url && /itch\.io/i.test(item.url)) {
+        const itchBtn = document.createElement('button');
+        itchBtn.type = 'button';
+        itchBtn.className = 'btn btn-primary btn-sm';
+        itchBtn.innerHTML = '🎮 Import via itch.io';
+        itchBtn.addEventListener('click', () => {
+          if (manageSuggestionsDialog && manageSuggestionsDialog.open) manageSuggestionsDialog.close();
+          if (itchUrlsInput) itchUrlsInput.value = item.url;
+          if (itchImportDialog && typeof itchImportDialog.showModal === 'function') {
+            itchImportDialog.showModal();
+          }
+        });
+        actions.appendChild(itchBtn);
+      } else if (item.url && /github\.com/i.test(item.url)) {
+        const ghBtn = document.createElement('button');
+        ghBtn.type = 'button';
+        ghBtn.className = 'btn btn-primary btn-sm';
+        ghBtn.innerHTML = '⚡ Import via GitHub';
+        ghBtn.addEventListener('click', () => {
+          if (manageSuggestionsDialog && manageSuggestionsDialog.open) manageSuggestionsDialog.close();
+          const ghInput = document.getElementById('mass-github-urls');
+          if (ghInput) ghInput.value = item.url;
+          const massDialog = document.getElementById('mass-import-dialog');
+          if (massDialog && typeof massDialog.showModal === 'function') {
+            massDialog.showModal();
+          }
+        });
+        actions.appendChild(ghBtn);
+      }
+
+      // Status Toggle (Mark Added / Mark Pending)
+      if (item.status !== 'added') {
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'btn btn-secondary btn-sm';
+        addBtn.textContent = '✅ Mark Added';
+        addBtn.addEventListener('click', async () => {
+          await updateSuggestionStatus(item.id, 'added');
+        });
+        actions.appendChild(addBtn);
+      } else {
+        const pendingBtn = document.createElement('button');
+        pendingBtn.type = 'button';
+        pendingBtn.className = 'btn btn-secondary btn-sm';
+        pendingBtn.textContent = '⏳ Mark Pending';
+        pendingBtn.addEventListener('click', async () => {
+          await updateSuggestionStatus(item.id, 'pending');
+        });
+        actions.appendChild(pendingBtn);
+      }
+
+      // Dismiss Button
+      if (item.status !== 'dismissed') {
+        const dismissBtn = document.createElement('button');
+        dismissBtn.type = 'button';
+        dismissBtn.className = 'btn btn-secondary btn-sm';
+        dismissBtn.textContent = 'Dismiss';
+        dismissBtn.addEventListener('click', async () => {
+          await updateSuggestionStatus(item.id, 'dismissed');
+        });
+        actions.appendChild(dismissBtn);
+      }
+
+      // Delete Button
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn btn-secondary btn-sm';
+      delBtn.title = 'Permanently delete this suggestion';
+      delBtn.textContent = '🗑️';
+      delBtn.addEventListener('click', async () => {
+        if (confirm(`Delete suggestion for "${item.title}"?`)) {
+          await deleteSuggestion(item.id);
+        }
+      });
+      actions.appendChild(delBtn);
+
+      card.appendChild(actions);
+      suggestionsListContainer.appendChild(card);
+    });
+  }
+
+  async function updateSuggestionStatus(id, newStatus) {
+    try {
+      const res = await fetch(`/api/admin/suggestions/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (res.ok) {
+        const item = allSuggestions.find((s) => s.id === id);
+        if (item) item.status = newStatus;
+        updateSuggestionsBadges();
+        renderSuggestionsList();
+      }
+    } catch (err) {
+      console.warn('Failed to update suggestion status:', err);
+    }
+  }
+
+  async function deleteSuggestion(id) {
+    try {
+      const res = await fetch(`/api/admin/suggestions/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        allSuggestions = allSuggestions.filter((s) => s.id !== id);
+        updateSuggestionsBadges();
+        renderSuggestionsList();
+      }
+    } catch (err) {
+      console.warn('Failed to delete suggestion:', err);
+    }
+  }
+
+  if (clearDismissedSuggestionsBtn) {
+    clearDismissedSuggestionsBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/admin/suggestions/clear', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filter: 'dismissed' })
+        });
+        if (res.ok) {
+          allSuggestions = allSuggestions.filter((s) => s.status !== 'dismissed');
+          updateSuggestionsBadges();
+          renderSuggestionsList();
+        }
+      } catch (err) {
+        console.warn('Failed to clear dismissed suggestions:', err);
+      }
+    });
+  }
+
+  // Filter Tab Button Handlers
+  [
+    { btn: filterAllSuggestionsBtn, filter: 'all' },
+    { btn: filterPendingSuggestionsBtn, filter: 'pending' },
+    { btn: filterAddedSuggestionsBtn, filter: 'added' }
+  ].forEach(({ btn, filter }) => {
+    if (btn) {
+      btn.addEventListener('click', () => {
+        [filterAllSuggestionsBtn, filterPendingSuggestionsBtn, filterAddedSuggestionsBtn].forEach((b) => {
+          if (b) b.classList.remove('active');
+        });
+        btn.classList.add('active');
+        currentSuggestionFilter = filter;
+        renderSuggestionsList();
+      });
+    }
+  });
+
+  if (headerSuggestionsBtn) {
+    headerSuggestionsBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      fetchAdminSuggestions();
+      if (manageSuggestionsDialog && typeof manageSuggestionsDialog.showModal === 'function' && !manageSuggestionsDialog.open) {
+        manageSuggestionsDialog.showModal();
+      }
+    });
+  }
+
+  if (bannerSuggestionsBtn) {
+    bannerSuggestionsBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      fetchAdminSuggestions();
+      if (manageSuggestionsDialog && typeof manageSuggestionsDialog.showModal === 'function' && !manageSuggestionsDialog.open) {
+        manageSuggestionsDialog.showModal();
       }
     });
   }

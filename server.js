@@ -17,6 +17,7 @@ const ROOT_DIR = __dirname;
 const DATA_DIR = path.join(ROOT_DIR, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'games.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+const SUGGESTIONS_FILE = path.join(DATA_DIR, 'suggestions.json');
 const UPLOADS_DIR = path.join(ROOT_DIR, 'uploads');
 const GAMES_DIR = path.join(UPLOADS_DIR, 'games');
 const COVERS_DIR = path.join(UPLOADS_DIR, 'covers');
@@ -142,6 +143,26 @@ function readGames() {
 
 function writeGames(games) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(games, null, 2), 'utf8');
+}
+
+function readSuggestions() {
+  try {
+    if (fs.existsSync(SUGGESTIONS_FILE)) {
+      const arr = JSON.parse(fs.readFileSync(SUGGESTIONS_FILE, 'utf8'));
+      return Array.isArray(arr) ? arr : [];
+    }
+  } catch (err) {
+    console.error('Error reading suggestions file:', err);
+  }
+  return [];
+}
+
+function writeSuggestions(suggestions) {
+  try {
+    fs.writeFileSync(SUGGESTIONS_FILE, JSON.stringify(suggestions, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Error writing suggestions file:', err);
+  }
 }
 
 // Find entry HTML file inside an extracted folder
@@ -1823,7 +1844,104 @@ app.delete('/api/games/:id', requireAdmin, (req, res) => {
 });
 
 function startServer(port) {
-  const server = app.listen(port, () => {
+  const server = // POST /api/suggestions - Public: Submit a game suggestion
+app.post('/api/suggestions', (req, res) => {
+  const { title = '', url = '', reason = '', submitterName = '' } = req.body || {};
+  const cleanTitle = String(title || '').trim().slice(0, 100);
+  const cleanUrl = String(url || '').trim().slice(0, 300);
+  const cleanReason = String(reason || '').trim().slice(0, 500);
+  const cleanSubmitter = String(submitterName || '').trim().slice(0, 50) || 'Anonymous Player';
+
+  if (!cleanTitle) {
+    return res.status(400).json({ error: 'Game title is required.' });
+  }
+
+  const suggestions = readSuggestions();
+  const newSuggestion = {
+    id: crypto.randomUUID(),
+    title: cleanTitle,
+    url: cleanUrl || null,
+    reason: cleanReason || null,
+    submitterName: cleanSubmitter,
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  };
+
+  suggestions.unshift(newSuggestion);
+  writeSuggestions(suggestions);
+
+  return res.status(201).json({
+    success: true,
+    message: 'Thank you! Your game suggestion has been received.',
+    suggestion: newSuggestion
+  });
+});
+
+// GET /api/admin/suggestions - Admin Only: List all game suggestions
+app.get('/api/admin/suggestions', requireAdmin, (req, res) => {
+  const suggestions = readSuggestions();
+  return res.json({ suggestions });
+});
+
+// PATCH /api/admin/suggestions/:id - Admin Only: Update suggestion status
+app.patch('/api/admin/suggestions/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body || {};
+  const validStatuses = ['pending', 'added', 'dismissed'];
+
+  if (!status || !validStatuses.includes(status)) {
+    return res.status(400).json({ error: 'Invalid suggestion status.' });
+  }
+
+  const suggestions = readSuggestions();
+  const item = suggestions.find((s) => s.id === id);
+  if (!item) {
+    return res.status(404).json({ error: 'Suggestion not found.' });
+  }
+
+  item.status = status;
+  item.updatedAt = new Date().toISOString();
+  writeSuggestions(suggestions);
+
+  return res.json({ success: true, suggestion: item });
+});
+
+// DELETE /api/admin/suggestions/:id - Admin Only: Delete a suggestion
+app.delete('/api/admin/suggestions/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const suggestions = readSuggestions();
+  const initialLength = suggestions.length;
+  const filtered = suggestions.filter((s) => s.id !== id);
+
+  if (filtered.length === initialLength) {
+    return res.status(404).json({ error: 'Suggestion not found.' });
+  }
+
+  writeSuggestions(filtered);
+  return res.json({ success: true, removedId: id });
+});
+
+// POST /api/admin/suggestions/clear - Admin Only: Clear dismissed or all suggestions
+app.post('/api/admin/suggestions/clear', requireAdmin, (req, res) => {
+  const { filter = 'dismissed' } = req.body || {};
+  const suggestions = readSuggestions();
+  let remaining = [];
+
+  if (filter === 'all') {
+    remaining = [];
+  } else if (filter === 'resolved') {
+    remaining = suggestions.filter((s) => s.status === 'pending');
+  } else {
+    remaining = suggestions.filter((s) => s.status !== 'dismissed');
+  }
+
+  const removedCount = suggestions.length - remaining.length;
+  writeSuggestions(remaining);
+
+  return res.json({ success: true, removedCount, suggestions: remaining });
+});
+
+app.listen(port, () => {
     console.log(`ArcadeVault server running at http://localhost:${port}`);
     console.log(`Admin Panel URL: http://localhost:${port}/admin (default user: ${ADMIN_USER})`);
   });
