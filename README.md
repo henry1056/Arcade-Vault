@@ -9,13 +9,18 @@ All Rights Reserved.
 ## 🌟 Features
 
 - **🎮 Playable Web Games**: Run `.html` single-file games or `.zip` web game bundles (Phaser, Godot, Construct, Unity WebGL, or custom JS) right in the browser with full-screen support.
+- **⚡ Mass GitHub Repository Importer**:
+  - Batch import entire GitHub repositories full of games in seconds.
+  - Automatically detects single-game repos or monorepos containing multiple game directories.
+  - **Automatic #1 Google Images Icon Selection**: Automatically searches Google Images for `"<game title> icon"` and assigns the top result (#1) hands-free without manual intervention.
+  - Real-time streaming progress console and status tracker.
 - **🔗 Embed Game URLs**: Option to link and embed games via external URLs.
 - **🛡️ Authenticated Admin Panel**:
   - Regular visitors only see the public arcade library and game player.
-  - Uploading and deleting games is protected behind admin authentication.
+  - Uploading, mass importing, and deleting games is protected behind admin authentication.
   - Access via `/admin` or the **Admin Access** button in the footer.
   - Default credentials: `admin` / `admin123` (customizable via `ADMIN_USER` and `ADMIN_PASS` env variables).
-- **🖼️ Step 2: Select Icon**:
+- **🖼️ Step 2: Select Icon (Single Uploads)**:
   - Automatically queries Google Images for `"<game title> icon"`.
   - Top 5 search results are displayed as selectable radio cards.
   - The chosen icon is downloaded and hosted locally so cover art never breaks.
