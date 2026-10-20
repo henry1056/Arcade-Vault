@@ -67,6 +67,24 @@
           </svg>
           ↩️ Undo Repos
         </button>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          commandfor="redo-icons-dialog"
+          command="show-modal"
+          id="header-redo-icons-btn"
+          title="Redo and re-fetch game icons from the web"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="m4.93 4.93 4.24 4.24"></path>
+            <path d="m14.83 9.17 4.24-4.24"></path>
+            <path d="m14.83 14.83 4.24 4.24"></path>
+            <path d="m9.17 14.83-4.24 4.24"></path>
+            <circle cx="12" cy="12" r="4"></circle>
+          </svg>
+          🎨 Redo Icons
+        </button>
         <button type="button" class="btn btn-secondary btn-sm" id="admin-logout-btn">
           Sign Out
         </button>
@@ -111,6 +129,24 @@
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
             </svg>
             ↩️ Undo Repo Uploads
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            commandfor="redo-icons-dialog"
+            command="show-modal"
+            id="banner-redo-icons-btn"
+            title="Redo and re-fetch game icons from the web"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="m4.93 4.93 4.24 4.24"></path>
+              <path d="m14.83 9.17 4.24-4.24"></path>
+              <path d="m14.83 14.83 4.24 4.24"></path>
+              <path d="m9.17 14.83-4.24 4.24"></path>
+              <circle cx="12" cy="12" r="4"></circle>
+            </svg>
+            🎨 Redo Game Icons
           </button>
           <button
             type="button"
@@ -942,8 +978,11 @@
                   placeholder="https://example.com/icon.png"
                   aria-describedby="edit-cover-hint"
                 >
+                <button type="button" class="btn btn-primary btn-sm" id="edit-autofetch-icon-btn" title="Automatically search web and pick top 1st icon">
+                  ⚡ Auto 1st Icon
+                </button>
                 <button type="button" class="btn btn-secondary btn-sm" id="edit-search-icon-btn">
-                  🔍 Google Icon
+                  🔍 Pick Icon
                 </button>
               </div>
               <p class="hint" style="margin: 0.25rem 0 0;">
@@ -1043,6 +1082,95 @@
         command="close"
       >
         Close
+      </button>
+    </div>
+  </dialog>
+
+  <!-- Redo Game Icons Modal Dialog (Admin Only) -->
+  <dialog id="redo-icons-dialog" class="modal-dialog redo-icons-modal" closedby="any" aria-labelledby="redo-icons-title">
+    <div class="modal-header">
+      <div class="modal-header-text">
+        <h2 id="redo-icons-title">🎨 Redo Game Icons</h2>
+        <span class="badge">Admin Tool</span>
+      </div>
+      <button
+        type="button"
+        class="icon-btn"
+        commandfor="redo-icons-dialog"
+        command="close"
+        aria-label="Close redo icons dialog"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <p class="dialog-lead">
+        Automatically search the web for authentic, high-resolution game icons and update your games.
+      </p>
+
+      <div class="redo-scope-section">
+        <label class="field-label" style="font-weight: 600; margin-bottom: 0.5rem; display: block;">Select Redo Scope:</label>
+        <div class="redo-scope-options">
+          <label class="redo-scope-card">
+            <input type="radio" name="redo-scope-radio" value="missing" checked>
+            <div class="redo-scope-content">
+              <strong>Missing &amp; Fallback Icons Only (Recommended)</strong>
+              <span>Update games that have no icon or have a procedural SVG fallback.</span>
+              <span class="badge badge-subtle" id="redo-missing-count-badge">0 games need icons</span>
+            </div>
+          </label>
+          <label class="redo-scope-card">
+            <input type="radio" name="redo-scope-radio" value="all">
+            <div class="redo-scope-content">
+              <strong>All Games in Library</strong>
+              <span>Re-search and replace icons for every game with the 1st web result.</span>
+              <span class="badge badge-subtle" id="redo-all-count-badge">0 total games</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Active Redo Progress State -->
+      <div id="redo-progress-section" class="redo-progress-section" hidden>
+        <div class="redo-progress-header">
+          <span id="redo-progress-label">Redoing icons...</span>
+          <span id="redo-progress-percent">0%</span>
+        </div>
+        <progress id="redo-icons-progress-bar" value="0" max="100" class="mass-progress-bar"></progress>
+
+        <div id="redo-current-game-card" class="redo-current-game-card">
+          <img id="redo-preview-img" src="" alt="Icon preview" width="48" height="48" class="redo-preview-thumb">
+          <div class="redo-current-game-info">
+            <span class="redo-current-title" id="redo-current-title">Game Title</span>
+            <span class="redo-current-status" id="redo-current-detail">Searching best icon...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Log / Results Summary -->
+      <div id="redo-results-summary" class="redo-results-summary" hidden>
+        <div class="alert alert-success" id="redo-summary-alert">
+          ✅ Successfully updated icons for <span id="redo-summary-count">0</span> game(s)!
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button
+        type="button"
+        class="btn btn-secondary"
+        commandfor="redo-icons-dialog"
+        command="close"
+        id="redo-cancel-close-btn"
+      >
+        Close
+      </button>
+      <button type="button" class="btn btn-primary" id="start-redo-icons-btn">
+        🚀 Start Redoing Icons
       </button>
     </div>
   </dialog>

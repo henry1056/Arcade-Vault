@@ -326,6 +326,25 @@
   const reposEmptyState = document.getElementById('repos-empty-state');
   const reposCountBadge = document.getElementById('repos-count-badge');
 
+  // DOM Elements - Redo Game Icons
+  const redoIconsDialog = document.getElementById('redo-icons-dialog');
+  const headerRedoIconsBtn = document.getElementById('header-redo-icons-btn');
+  const bannerRedoIconsBtn = document.getElementById('banner-redo-icons-btn');
+  const redoMissingCountBadge = document.getElementById('redo-missing-count-badge');
+  const redoAllCountBadge = document.getElementById('redo-all-count-badge');
+  const redoProgressSection = document.getElementById('redo-progress-section');
+  const redoProgressLabel = document.getElementById('redo-progress-label');
+  const redoProgressPercent = document.getElementById('redo-progress-percent');
+  const redoIconsProgressBar = document.getElementById('redo-icons-progress-bar');
+  const redoCurrentGameCard = document.getElementById('redo-current-game-card');
+  const redoPreviewImg = document.getElementById('redo-preview-img');
+  const redoCurrentTitle = document.getElementById('redo-current-title');
+  const redoCurrentDetail = document.getElementById('redo-current-detail');
+  const redoResultsSummary = document.getElementById('redo-results-summary');
+  const redoSummaryCount = document.getElementById('redo-summary-count');
+  const startRedoIconsBtn = document.getElementById('start-redo-icons-btn');
+  const editAutofetchIconBtn = document.getElementById('edit-autofetch-icon-btn');
+
   // DOM Elements - Edit Game Details Dialog
   const editGameDialog = document.getElementById('edit-game-dialog');
   const editGameForm = document.getElementById('edit-game-form');
@@ -396,6 +415,8 @@
     if (gamePageDeleteBtn) gamePageDeleteBtn.hidden = !isAdmin;
     if (headerManageReposBtn) headerManageReposBtn.hidden = !isAdmin;
     if (bannerManageReposBtn) bannerManageReposBtn.hidden = !isAdmin;
+    if (headerRedoIconsBtn) headerRedoIconsBtn.hidden = !isAdmin;
+    if (bannerRedoIconsBtn) bannerRedoIconsBtn.hidden = !isAdmin;
     footerAdminBtn.hidden = isAdmin;
 
     emptyStateDesc.textContent = isAdmin
@@ -693,13 +714,15 @@
       }
     }
 
-    // 4. Always provide an artistic generated cover option
-    const genCover = generateGameCoverSvg(gameTitle, category);
-    results.push({
-      url: genCover,
-      thumbnailUrl: genCover,
-      title: `${gameTitle} (Procedural Cover)`
-    });
+    // 4. Fallback procedural cover ONLY if 0 real icons were found
+    if (results.length === 0) {
+      const genCover = generateGameCoverSvg(gameTitle, category);
+      results.push({
+        url: genCover,
+        thumbnailUrl: genCover,
+        title: `${gameTitle} (Procedural Cover)`
+      });
+    }
 
     return { query, results: results.slice(0, 5) };
   }
@@ -2748,4 +2771,218 @@
 
   checkAdminSession();
   fetchGames();
+
+  // Redo Game Icons Logic
+  function updateRedoBadgeCounts() {
+    const missingCount = allGames.filter(
+      (g) => !g.coverUrl || g.coverUrl.startsWith('data:image/svg+xml') || g.coverUrl.includes('placeholder')
+    ).length;
+    if (redoMissingCountBadge) redoMissingCountBadge.textContent = `${missingCount} game(s) need icons`;
+    if (redoAllCountBadge) redoAllCountBadge.textContent = `${allGames.length} total game(s)`;
+  }
+
+  function openRedoIconsDialog() {
+    updateRedoBadgeCounts();
+    if (redoProgressSection) redoProgressSection.hidden = true;
+    if (redoResultsSummary) redoResultsSummary.hidden = true;
+    if (startRedoIconsBtn) {
+      startRedoIconsBtn.disabled = false;
+      startRedoIconsBtn.textContent = '🚀 Start Redoing Icons';
+    }
+    if (redoIconsDialog && typeof redoIconsDialog.showModal === 'function' && !redoIconsDialog.open) {
+      redoIconsDialog.showModal();
+    }
+  }
+
+  async function startRedoIconsProcess() {
+    const selectedScopeRadio = document.querySelector('input[name="redo-scope-radio"]:checked');
+    const scope = selectedScopeRadio ? selectedScopeRadio.value : 'missing';
+
+    let targets = [];
+    if (scope === 'all') {
+      targets = [...allGames];
+    } else {
+      targets = allGames.filter(
+        (g) => !g.coverUrl || g.coverUrl.startsWith('data:image/svg+xml') || g.coverUrl.includes('placeholder')
+      );
+    }
+
+    if (targets.length === 0) {
+      alert(scope === 'all' ? 'No games found in the library to redo.' : 'All games already have icons! Select "All Games in Library" if you wish to re-fetch all icons.');
+      return;
+    }
+
+    startRedoIconsBtn.disabled = true;
+    startRedoIconsBtn.textContent = '⏳ Redoing Icons...';
+    redoProgressSection.hidden = false;
+    redoResultsSummary.hidden = true;
+    redoIconsProgressBar.value = 0;
+    redoIconsProgressBar.max = targets.length;
+    redoProgressPercent.textContent = '0%';
+
+    let updatedCount = 0;
+
+    for (let i = 0; i < targets.length; i++) {
+      const game = targets[i];
+      redoProgressLabel.textContent = `[${i + 1}/${targets.length}] Processing "${game.title}"...`;
+      redoCurrentTitle.textContent = game.title;
+      redoCurrentDetail.textContent = 'Searching web for authentic game icon...';
+      if (game.coverUrl) {
+        redoPreviewImg.src = game.coverUrl;
+      } else {
+        redoPreviewImg.src = generateGameCoverSvg(game.title, game.category || 'Arcade');
+      }
+
+      let newCoverUrl = null;
+
+      // 1. If backend server is available, use single game redo endpoint
+      try {
+        const redoRes = await fetch(`/api/admin/redo-game-icon/${encodeURIComponent(game.id)}`, {
+          method: 'POST'
+        });
+        if (redoRes.ok) {
+          const redoData = await redoRes.json();
+          if (redoData?.game?.coverUrl) {
+            newCoverUrl = redoData.game.coverUrl;
+            game.coverUrl = newCoverUrl;
+          }
+        }
+      } catch {
+        // Backend not available (Cloudflare Pages static mode)
+      }
+
+      // 2. Client fallback for Cloudflare Pages / Static mode
+      if (!newCoverUrl) {
+        try {
+          const iconData = await clientIconSearch(game.title, game.category || 'Arcade');
+          if (iconData?.results?.length > 0) {
+            newCoverUrl = iconData.results[0].thumbnailUrl || iconData.results[0].url;
+            game.coverUrl = newCoverUrl;
+            await idbPutGame(game);
+          }
+        } catch (err) {
+          console.warn('Failed client icon search for:', game.title, err);
+        }
+      }
+
+      if (newCoverUrl) {
+        updatedCount++;
+        redoPreviewImg.src = newCoverUrl;
+        redoCurrentDetail.textContent = '✅ Icon updated!';
+      } else {
+        redoCurrentDetail.textContent = '⚠️ Could not find new icon, kept current';
+      }
+
+      const pct = Math.round(((i + 1) / targets.length) * 100);
+      redoIconsProgressBar.value = i + 1;
+      redoProgressPercent.textContent = `${pct}%`;
+
+      await new Promise((r) => setTimeout(r, 80));
+    }
+
+    renderGames();
+
+    if (currentGame && currentGame.id) {
+      const updatedCurrent = allGames.find((g) => g.id === currentGame.id);
+      if (updatedCurrent && updatedCurrent.coverUrl) {
+        currentGame = updatedCurrent;
+        if (gamePageCoverImg) {
+          gamePageCoverImg.src = currentGame.coverUrl;
+          gamePageCoverImg.hidden = false;
+        }
+        if (gamePageFallbackArt) {
+          gamePageFallbackArt.hidden = true;
+        }
+      }
+    }
+
+    startRedoIconsBtn.disabled = false;
+    startRedoIconsBtn.textContent = '🚀 Start Redoing Icons';
+    redoProgressLabel.textContent = `Completed! (${updatedCount}/${targets.length} updated)`;
+    redoSummaryCount.textContent = updatedCount;
+    redoResultsSummary.hidden = false;
+    updateRedoBadgeCounts();
+  }
+
+  // Event Listeners for Redo Icons
+  if (headerRedoIconsBtn) {
+    headerRedoIconsBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openRedoIconsDialog();
+    });
+  }
+
+  if (bannerRedoIconsBtn) {
+    bannerRedoIconsBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openRedoIconsDialog();
+    });
+  }
+
+  if (startRedoIconsBtn) {
+    startRedoIconsBtn.addEventListener('click', () => {
+      startRedoIconsProcess();
+    });
+  }
+
+  // Auto-Fetch 1st Icon in Edit Game Modal
+  if (editAutofetchIconBtn) {
+    editAutofetchIconBtn.addEventListener('click', async () => {
+      const title = editGameTitle.value.trim();
+      if (!title) {
+        if (editFormStatus) {
+          editFormStatus.className = 'form-status error';
+          editFormStatus.textContent = 'Please enter a game title before fetching an icon.';
+          editFormStatus.hidden = false;
+        }
+        editGameTitle.focus();
+        return;
+      }
+
+      const origText = editAutofetchIconBtn.textContent;
+      editAutofetchIconBtn.disabled = true;
+      editAutofetchIconBtn.textContent = '⏳ Searching...';
+
+      try {
+        let topUrl = null;
+        try {
+          const res = await fetch('/api/search-icons?q=' + encodeURIComponent(title));
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.results?.length > 0) {
+              topUrl = data.results[0].thumbnailUrl || data.results[0].url;
+            }
+          }
+        } catch {
+          // Fallback below
+        }
+
+        if (!topUrl) {
+          const clientData = await clientIconSearch(title, editGameCategory.value);
+          if (clientData?.results?.length > 0) {
+            topUrl = clientData.results[0].thumbnailUrl || clientData.results[0].url;
+          }
+        }
+
+        if (topUrl) {
+          editGameCoverUrl.value = topUrl;
+          updateEditCoverPreview(topUrl);
+          editAutofetchIconBtn.textContent = '✅ Applied!';
+          setTimeout(() => {
+            editAutofetchIconBtn.textContent = origText;
+            editAutofetchIconBtn.disabled = false;
+          }, 1500);
+        } else {
+          alert(`No online icons found for "${title}".`);
+          editAutofetchIconBtn.textContent = origText;
+          editAutofetchIconBtn.disabled = false;
+        }
+      } catch (err) {
+        alert('Failed to fetch icon: ' + err.message);
+        editAutofetchIconBtn.textContent = origText;
+        editAutofetchIconBtn.disabled = false;
+      }
+    });
+  }
+
 })();

@@ -1600,6 +1600,132 @@ input.user-valid-fallback {
   color: var(--text-secondary);
 }
 
+
+/* Redo Game Icons Modal */
+.redo-icons-modal {
+  width: min(640px, 100% - 1.5rem);
+  max-width: 640px;
+}
+
+.redo-scope-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.redo-scope-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.redo-scope-card:hover {
+  border-color: var(--accent-primary);
+  background-color: rgba(99, 102, 241, 0.05);
+}
+
+.redo-scope-card:has(input:checked) {
+  border-color: var(--accent-primary);
+  background-color: rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.redo-scope-card input[type="radio"] {
+  margin-top: 0.25rem;
+  accent-color: var(--accent-primary);
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.redo-scope-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+}
+
+.redo-scope-content strong {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.redo-scope-content span {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.redo-progress-section {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.redo-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.redo-current-game-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+}
+
+.redo-preview-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  background-color: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.redo-current-game-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.redo-current-title {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.redo-current-status {
+  font-size: 0.8rem;
+  color: var(--accent-primary);
+}
+
+.redo-results-summary {
+  margin-top: 1rem;
+}
+
 [hidden] {
   display: none !important;
 }

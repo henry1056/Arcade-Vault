@@ -172,77 +172,73 @@ function findEntryHtml(baseDir, currentDir = baseDir) {
   return null;
 }
 
-// Search top 5 game icons with "icon" appended to the query
+// Search top 5 game icons with multi-source fallback (DuckDuckGo, Bing, iTunes, Wikipedia, Google)
 async function searchGameIcons(rawQuery) {
-  const base = String(rawQuery || '').trim();
+  const base = String(rawQuery || '')
+    .replace(/\s*[\(\[](?:html5|web|js|v[\d\.]+|online|free)[\)\]]/gi, '')
+    .trim();
   const searchQuery = /\bicon$/i.test(base) ? base : `${base} icon`;
-  const encodedQuery = encodeURIComponent(searchQuery);
   const results = [];
   const seen = new Set();
 
-  const addResult = (url, thumbUrl, title) => {
-    const cleanUrl = (url || thumbUrl || '').replace(/&amp;/g, '&');
-    const cleanThumb = (thumbUrl || url || '').replace(/&amp;/g, '&');
-    if (!cleanThumb || seen.has(cleanThumb)) return;
+  const addResult = (url, thumbUrl, title, width, height) => {
+    const cleanUrl = (url || thumbUrl || '').replace(/&amp;/g, '&').trim();
+    const cleanThumb = (thumbUrl || url || '').replace(/&amp;/g, '&').trim();
+    if (!cleanThumb || !cleanThumb.startsWith('http') || seen.has(cleanThumb)) return;
     seen.add(cleanThumb);
     results.push({
       url: cleanUrl,
       thumbnailUrl: cleanThumb,
-      title: title || searchQuery
+      title: title || searchQuery,
+      width: width || 0,
+      height: height || 0
     });
   };
 
-  // 1. Optional Google Custom Search Image API (if GOOGLE_API_KEY and GOOGLE_CSE_ID are set)
-  if (process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID) {
-    try {
-      const cseUrl = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(
-        process.env.GOOGLE_API_KEY
-      )}&cx=${encodeURIComponent(
-        process.env.GOOGLE_CSE_ID
-      )}&searchType=image&num=5&q=${encodedQuery}`;
-      const cseRes = await fetch(cseUrl);
-      if (cseRes.ok) {
-        const cseData = await cseRes.json();
-        for (const item of cseData.items || []) {
-          addResult(item.link, item.image?.thumbnailLink || item.link, item.title);
-          if (results.length >= 5) break;
+  // 1. DuckDuckGo Image Search API (Fast, authentic game icons with direct CDN delivery)
+  try {
+    const ddgPageUrl = `https://duckduckgo.com/?q=${encodeURIComponent(base + ' game icon')}&iax=images&ia=images`;
+    const ddgRes = await fetch(ddgPageUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+    if (ddgRes.ok) {
+      const html = await ddgRes.text();
+      const vqdMatch = html.match(/vqd=([0-9-]+)/) || html.match(/vqd=["']([0-9-]+)["']/);
+      if (vqdMatch) {
+        const vqd = vqdMatch[1];
+        const apiUrl = `https://duckduckgo.com/i.js?l=us-en&o=json&q=${encodeURIComponent(
+          base + ' game icon'
+        )}&vqd=${vqd}&f=,,,`;
+        const apiRes = await fetch(apiUrl, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Referer': 'https://duckduckgo.com/'
+          }
+        });
+        if (apiRes.ok) {
+          const data = await apiRes.json();
+          for (const item of data.results || []) {
+            addResult(item.image, item.thumbnail, item.title, item.width, item.height);
+            if (results.length >= 6) break;
+          }
         }
       }
-    } catch {
-      // Fallback below
     }
+  } catch (err) {
+    // Continue to next providers
   }
 
-  // 2. Direct Google Images search (www.google.com/search?tbm=isch&q=<game>+icon)
-  if (results.length < 5) {
-    try {
-      const gRes = await fetch(`https://www.google.com/search?q=${encodedQuery}&tbm=isch&hl=en`, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-          'Accept-Language': 'en-US,en;q=0.9'
-        }
-      });
-      if (gRes.ok) {
-        const gHtml = await gRes.text();
-        const gThumbs = [
-          ...gHtml.matchAll(/https:\/\/encrypted-tbn0\.gstatic\.com\/images\?q=tbn:[^"&\s<>\\]+/g)
-        ].map((m) => m[0]);
-        for (const thumb of gThumbs) {
-          addResult(thumb, thumb, searchQuery);
-          if (results.length >= 5) break;
-        }
-      }
-    } catch {
-      // Fallback below
-    }
-  }
-
-  // 3. Web Image Search fallback for "<game> icon" (when Google blocks automated requests with JS challenge)
+  // 2. Bing Images Search (murl / turl extraction)
   if (results.length < 5) {
     try {
       const bRes = await fetch(
-        `https://www.bing.com/images/search?q=${encodedQuery}&form=HDRSC2`,
+        `https://www.bing.com/images/search?q=${encodeURIComponent(searchQuery)}&form=HDRSC2`,
         {
           headers: {
             'User-Agent':
@@ -257,7 +253,7 @@ async function searchGameIcons(rawQuery) {
           /murl&quot;:&quot;(https?:\/\/(?:(?!&quot;).)+)&quot;,&quot;turl&quot;:&quot;(https?:\/\/(?:(?!&quot;).)+)&quot;/g;
         for (const match of bHtml.matchAll(itemRegex)) {
           addResult(match[1], match[2], searchQuery);
-          if (results.length >= 5) break;
+          if (results.length >= 6) break;
         }
       }
     } catch {
@@ -265,7 +261,7 @@ async function searchGameIcons(rawQuery) {
     }
   }
 
-  // 4. App Store Game Icon supplement if fewer than 5 results found
+  // 3. Apple iTunes Software Search (Official 512x512 App Icons)
   if (results.length < 5) {
     try {
       const iRes = await fetch(
@@ -277,8 +273,53 @@ async function searchGameIcons(rawQuery) {
           const art = item.artworkUrl512 || item.artworkUrl100;
           if (art) {
             addResult(art, art, item.trackName || searchQuery);
-            if (results.length >= 5) break;
+            if (results.length >= 6) break;
           }
+        }
+      }
+    } catch {
+      // Fallback below
+    }
+  }
+
+  // 4. Wikipedia Commons / Video Game Page Images
+  if (results.length < 5) {
+    try {
+      const wikiRes = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(
+          base + ' video game'
+        )}&gsrlimit=5&prop=pageimages&pithumbsize=512&format=json`
+      );
+      if (wikiRes.ok) {
+        const wikiData = await wikiRes.json();
+        const pages = wikiData?.query?.pages ? Object.values(wikiData.query.pages) : [];
+        for (const page of pages) {
+          const thumb = page?.thumbnail?.source;
+          if (thumb) {
+            addResult(thumb, thumb, page.title);
+            if (results.length >= 6) break;
+          }
+        }
+      }
+    } catch {
+      // Fallback below
+    }
+  }
+
+  // 5. Optional Google Custom Search Image API (if credentials set)
+  if (results.length < 5 && process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID) {
+    try {
+      const cseUrl = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(
+        process.env.GOOGLE_API_KEY
+      )}&cx=${encodeURIComponent(
+        process.env.GOOGLE_CSE_ID
+      )}&searchType=image&num=5&q=${encodeURIComponent(searchQuery)}`;
+      const cseRes = await fetch(cseUrl);
+      if (cseRes.ok) {
+        const cseData = await cseRes.json();
+        for (const item of cseData.items || []) {
+          addResult(item.link, item.image?.thumbnailLink || item.link, item.title);
+          if (results.length >= 5) break;
         }
       }
     } catch {
@@ -294,6 +335,21 @@ async function searchGameIcons(rawQuery) {
 
 // GET /api/admin/icon-search - Search top 5 icons for "<game name> icon" (Admin Only)
 app.get('/api/admin/icon-search', requireAdmin, async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (!q) {
+    return res.status(400).json({ error: 'Search query is required.' });
+  }
+  try {
+    const data = await searchGameIcons(q);
+    return res.json(data);
+  } catch (err) {
+    console.error('Icon search error:', err);
+    return res.status(500).json({ error: 'Failed to search icons.' });
+  }
+});
+
+// GET /api/search-icons - Public/Client alias for searching game icons
+app.get('/api/search-icons', async (req, res) => {
   const q = String(req.query.q || '').trim();
   if (!q) {
     return res.status(400).json({ error: 'Search query is required.' });
@@ -856,6 +912,92 @@ app.put('/api/games/:id/icon', requireAdmin, async (req, res) => {
   writeGames(games);
 
   return res.json(game);
+});
+
+// POST /api/admin/redo-icons - Batch redo icons for games (Admin Only)
+app.post('/api/admin/redo-icons', requireAdmin, async (req, res) => {
+  const { mode = 'missing', gameIds = null } = req.body || {};
+  const games = readGames();
+
+  let targets = [];
+  if (Array.isArray(gameIds) && gameIds.length > 0) {
+    const targetSet = new Set(gameIds);
+    targets = games.filter((g) => targetSet.has(g.id));
+  } else if (mode === 'all') {
+    targets = [...games];
+  } else {
+    // 'missing' mode: games without coverUrl or with placeholder / SVG cover
+    targets = games.filter(
+      (g) => !g.coverUrl || g.coverUrl.startsWith('data:image/svg+xml') || g.coverUrl.includes('placeholder')
+    );
+  }
+
+  let updatedCount = 0;
+  const updatedGames = [];
+
+  for (const game of targets) {
+    try {
+      const searchRes = await searchGameIcons(game.title);
+      if (searchRes && Array.isArray(searchRes.results) && searchRes.results.length > 0) {
+        const topIcon = searchRes.results[0];
+        const savedCover = await downloadAndSaveCover(game.id, [topIcon.thumbnailUrl, topIcon.url]);
+        if (savedCover) {
+          game.coverUrl = savedCover;
+          updatedCount++;
+          updatedGames.push({ id: game.id, title: game.title, coverUrl: savedCover });
+        }
+      }
+    } catch (err) {
+      console.warn(`Failed to redo icon for "${game.title}":`, err.message);
+    }
+  }
+
+  if (updatedCount > 0) {
+    writeGames(games);
+  }
+
+  return res.json({
+    success: true,
+    mode,
+    totalTargeted: targets.length,
+    updatedCount,
+    updatedGames,
+    games
+  });
+});
+
+// POST /api/admin/redo-game-icon/:id - Redo icon for a single game (Admin Only)
+app.post('/api/admin/redo-game-icon/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const games = readGames();
+  const game = games.find((g) => g.id === id);
+  if (!game) {
+    return res.status(404).json({ error: 'Game not found.' });
+  }
+
+  try {
+    const searchRes = await searchGameIcons(game.title);
+    if (!searchRes || !Array.isArray(searchRes.results) || searchRes.results.length === 0) {
+      return res.status(404).json({ error: `No online icons found for "${game.title}".` });
+    }
+
+    const topIcon = searchRes.results[0];
+    const savedCover = await downloadAndSaveCover(game.id, [topIcon.thumbnailUrl, topIcon.url]);
+    if (!savedCover) {
+      return res.status(500).json({ error: 'Failed to download and save candidate icon.' });
+    }
+
+    game.coverUrl = savedCover;
+    writeGames(games);
+
+    return res.json({
+      success: true,
+      game
+    });
+  } catch (err) {
+    console.error(`Error redoing icon for game ${id}:`, err);
+    return res.status(500).json({ error: 'Failed to redo game icon.' });
+  }
 });
 
 // POST /api/admin/mass-import-github - Mass import GitHub game repositories with automated 1st icon selection (Admin Only)
