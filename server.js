@@ -1843,8 +1843,7 @@ app.delete('/api/games/:id', requireAdmin, (req, res) => {
   return res.json({ success: true });
 });
 
-function startServer(port) {
-  const server = // POST /api/suggestions - Public: Submit a game suggestion
+// POST /api/suggestions - Public: Submit a game suggestion
 app.post('/api/suggestions', (req, res) => {
   const { title = '', url = '', reason = '', submitterName = '' } = req.body || {};
   const cleanTitle = String(title || '').trim().slice(0, 100);
@@ -1941,9 +1940,11 @@ app.post('/api/admin/suggestions/clear', requireAdmin, (req, res) => {
   return res.json({ success: true, removedCount, suggestions: remaining });
 });
 
-app.listen(port, () => {
-    console.log(`ArcadeVault server running at http://localhost:${port}`);
-    console.log(`Admin Panel URL: http://localhost:${port}/admin (default user: ${ADMIN_USER})`);
+function startServer(port) {
+  const host = process.env.HOST || '0.0.0.0';
+  const server = app.listen(port, host, () => {
+    console.log(`ArcadeVault server running at http://${host}:${port}`);
+    console.log(`Admin Panel URL: http://${host}:${port}/admin (default user: ${ADMIN_USER})`);
   });
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
