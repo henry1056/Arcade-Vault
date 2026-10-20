@@ -1,0 +1,9 @@
+node_modules/
+uploads/tmp/
+uploads/games/*
+!uploads/games/.gitkeep
+uploads/covers/*
+!uploads/covers/.gitkeep
+.env
+.DS_Store
+Thumbs.db
