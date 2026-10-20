@@ -466,6 +466,7 @@ function scanZipForGames(zip, subpath = '') {
     return {
       gameDir: item.gameDir,
       entryRelPath: item.entryRelPath,
+      entryEntryName: item.entryEntryName,
       fullPrefix
     };
   });
@@ -507,6 +508,80 @@ function extractGameAssets(zip, gameItem, targetDir) {
   return findEntryHtml(targetDir) || 'index.html';
 }
 
+// Clean and format HTML <title> strings by stripping boilerplate phrases
+function cleanExtractedTitle(rawTitle) {
+  if (!rawTitle) return '';
+  let t = rawTitle.trim();
+  t = t.replace(/\s*[-|•–—]\s*(GitHub|HTML5(?:\s*Canvas)?(?:\s*Game)?|Free Online Game|Play Online|Canvas Game|JavaScript Game|Browser Game).*$/i, '').trim();
+  if (t && !/^(document|webpack app|vite app|react app|index|untitled|html5 game)$/i.test(t)) {
+    return t;
+  }
+  return '';
+}
+
+// Generate normalized comparison keys to match game titles regardless of punctuation/case/spacing
+function titleKeys(title) {
+  if (!title) return [];
+  const s = String(title).toLowerCase();
+  const spaced = s.replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+  const compact = s.replace(/[^a-z0-9]/g, '');
+  return [spaced, compact].filter(Boolean);
+}
+
+// Check if two game titles refer to the same game
+function isSameGame(titleA, titleB) {
+  const keysA = titleKeys(titleA);
+  const keysB = titleKeys(titleB);
+  if (!keysA.length || !keysB.length) return false;
+  return keysA.some((k) => keysB.includes(k));
+}
+
+// Find existing game in library by title or repo source
+function findExistingGame(title, repoFullName, gameDir, existingGames) {
+  for (const g of existingGames) {
+    if (title && g.title && isSameGame(title, g.title)) {
+      return g;
+    }
+    if (repoFullName && g.sourceRepo && g.sourceRepo.toLowerCase() === repoFullName.toLowerCase()) {
+      const gDir = (g.sourceDir || '').toLowerCase();
+      const targetDir = (gameDir || '').toLowerCase();
+      if (gDir === targetDir) {
+        return g;
+      }
+    }
+  }
+  return null;
+}
+
+// Fast pre-extraction title peek directly from the zip in memory
+function peekGameTitle(zip, gameItem, repoInfo) {
+  let title = '';
+  if (gameItem.entryEntryName) {
+    try {
+      const entry = zip.getEntry(gameItem.entryEntryName);
+      if (entry) {
+        const html = entry.getData().toString('utf8');
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        if (titleMatch && titleMatch[1]) {
+          title = cleanExtractedTitle(titleMatch[1]);
+        }
+      }
+    } catch {
+      // Ignore peek error
+    }
+  }
+
+  if (!title) {
+    const rawName = gameItem.gameDir ? path.basename(gameItem.gameDir) : repoInfo.repo;
+    title = rawName
+      .replace(/[-_]+/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim();
+  }
+
+  return title;
+}
+
 // Extract game metadata (title, category, author, description)
 function extractGameMetadata(targetDir, entryHtmlRel, gameItem, repoInfo, defaultCategory) {
   let title = '';
@@ -518,11 +593,7 @@ function extractGameMetadata(targetDir, entryHtmlRel, gameItem, repoInfo, defaul
       const htmlContent = fs.readFileSync(indexHtmlPath, 'utf8');
       const titleMatch = htmlContent.match(/<title[^>]*>([^<]+)<\/title>/i);
       if (titleMatch && titleMatch[1]) {
-        let t = titleMatch[1].trim();
-        t = t.replace(/\s*[-|•–—]\s*(GitHub|HTML5(?:\s*Canvas)?(?:\s*Game)?|Free Online Game|Play Online|Canvas Game|JavaScript Game|Browser Game).*$/i, '').trim();
-        if (t && !/^(document|webpack app|vite app|react app|index|untitled|html5 game)$/i.test(t)) {
-          title = t;
-        }
+        title = cleanExtractedTitle(titleMatch[1]);
       }
       const descMatch = htmlContent.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
       if (descMatch && descMatch[1]) {
@@ -619,6 +690,7 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
   sendEvent('start', { totalRepos: cleanUrls.length });
 
   const importedGames = [];
+  const skippedGames = [];
   const errors = [];
   const existingGames = readGames();
 
@@ -671,6 +743,31 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
 
       for (let gIdx = 0; gIdx < detectedGames.length; gIdx++) {
         const gameItem = detectedGames[gIdx];
+
+        // Step 1: Pre-check if game already exists before extracting assets
+        const peekedTitle = peekGameTitle(zip, gameItem, parsed);
+        const existingBefore = findExistingGame(peekedTitle, parsed.fullName, gameItem.gameDir, existingGames);
+
+        if (existingBefore) {
+          skippedGames.push({
+            title: peekedTitle,
+            existingTitle: existingBefore.title,
+            repo: parsed.fullName,
+            reason: 'Already in library'
+          });
+          sendEvent('game_skipped', {
+            title: peekedTitle,
+            existingTitle: existingBefore.title,
+            repo: parsed.fullName,
+            reason: `Already in library as "${existingBefore.title}"`
+          });
+          sendEvent('log', {
+            level: 'warn',
+            message: `⏭️ Skipped "${peekedTitle}" from ${parsed.fullName} (already in library as "${existingBefore.title}")`
+          });
+          continue;
+        }
+
         const gameId = crypto.randomUUID();
         const targetGameDir = path.join(GAMES_DIR, gameId);
 
@@ -681,6 +778,32 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
 
         const entryHtmlRel = extractGameAssets(zip, gameItem, targetGameDir);
         const meta = extractGameMetadata(targetGameDir, entryHtmlRel, gameItem, parsed, defaultCategory);
+
+        // Step 2: Post-metadata verification in case full HTML yielded a matching title
+        const existingAfter = findExistingGame(meta.title, parsed.fullName, gameItem.gameDir, existingGames);
+        if (existingAfter) {
+          try {
+            fs.rmSync(targetGameDir, { recursive: true, force: true });
+          } catch {}
+
+          skippedGames.push({
+            title: meta.title,
+            existingTitle: existingAfter.title,
+            repo: parsed.fullName,
+            reason: 'Already in library'
+          });
+          sendEvent('game_skipped', {
+            title: meta.title,
+            existingTitle: existingAfter.title,
+            repo: parsed.fullName,
+            reason: `Already in library as "${existingAfter.title}"`
+          });
+          sendEvent('log', {
+            level: 'warn',
+            message: `⏭️ Skipped "${meta.title}" from ${parsed.fullName} (already in library as "${existingAfter.title}")`
+          });
+          continue;
+        }
 
         sendEvent('log', {
           level: 'info',
@@ -732,6 +855,8 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
           author: meta.author,
           description: meta.description,
           sourceType: 'file',
+          sourceRepo: parsed.fullName,
+          sourceDir: gameItem.gameDir || '',
           playUrl: `/uploads/games/${gameId}/${entryHtmlRel}`,
           coverUrl,
           createdAt: new Date().toISOString()
@@ -757,8 +882,10 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
 
   sendEvent('complete', {
     totalImported: importedGames.length,
+    totalSkipped: skippedGames.length,
     totalErrors: errors.length,
     importedGames,
+    skippedGames,
     errors
   });
 
@@ -766,8 +893,10 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
     return res.json({
       success: true,
       totalImported: importedGames.length,
+      totalSkipped: skippedGames.length,
       totalErrors: errors.length,
       importedGames,
+      skippedGames,
       errors
     });
   } else {
