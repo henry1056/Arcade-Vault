@@ -406,6 +406,17 @@ async function downloadGitHubRepoZip(owner, repo, branch, token) {
   throw new Error(`Could not download repository ${owner}/${repo}. Check the repository name or branch permissions.`);
 }
 
+// Format a folder or file slug into a clean human-readable game title
+function formatSlugToTitle(slug) {
+  return String(slug || '')
+    .replace(/\.html?$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
+
 // Detect individual games within a downloaded repository ZIP
 function scanZipForGames(zip, subpath = '') {
   const entries = zip.getEntries();
@@ -421,82 +432,181 @@ function scanZipForGames(zip, subpath = '') {
     }
   }
 
-  const htmlEntries = entries.filter((e) => {
-    if (e.isDirectory) return false;
-    const name = e.entryName.replace(/\\/g, '/');
-    const rel = name.slice(rootPrefix.length);
-    if (normalizedSubpath && !rel.startsWith(normalizedSubpath)) return false;
-    if (rel.includes('/node_modules/') || rel.startsWith('node_modules/')) return false;
-    if (rel.includes('/.git/') || rel.startsWith('.git/')) return false;
-    const base = path.basename(name).toLowerCase();
-    return base === 'index.html' || base === 'index.htm' || base === 'game.html' || base === 'play.html';
-  });
+  const IGNORE_DIRS = new Set([
+    'node_modules', '.git', '.github', '.vscode', '.idea', 'bower_components',
+    'vendor', 'vendors', 'docs', 'doc', 'test', 'tests', '__tests__', 'spec',
+    'specs', 'coverage', 'partials', 'templates', 'includes', 'components'
+  ]);
 
-  if (htmlEntries.length === 0) {
-    const anyHtml = entries.filter((e) => {
-      if (e.isDirectory) return false;
-      const name = e.entryName.replace(/\\/g, '/');
-      const rel = name.slice(rootPrefix.length);
-      if (normalizedSubpath && !rel.startsWith(normalizedSubpath)) return false;
-      if (rel.includes('/node_modules/') || rel.includes('/.git/') || rel.includes('/docs/')) return false;
-      return /\.html?$/i.test(name);
+  const IGNORE_FILES = /^(404|403|500|error|readme|license|copying|privacy|terms|tos|contact|about|credits|changelog|help|instructions|faq|offline|blank|empty|template|test|spec|oauth|callback|login|signup|register|header|footer|nav|sidebar|modal|popup|ad|ads|google[0-9a-f]+)\.html?$/i;
+
+  const INDEX_PRIORITY = ['index.html', 'index.htm', 'game.html', 'play.html', 'main.html', 'start.html', 'launch.html'];
+  const INDEX_SET = new Set(INDEX_PRIORITY);
+
+  const COLLECTION_DIR_NAMES = new Set([
+    'games', 'game', 'projects', 'project', 'gfiles', 'html5', 'arcade',
+    'roms', 'collection', 'collections', 'apps', 'play', 'webgames', 'files',
+    'list', 'all', 'public', 'src', 'static', 'pages'
+  ]);
+
+  const candidateEntries = [];
+  for (const e of entries) {
+    if (e.isDirectory) continue;
+    const fullName = e.entryName.replace(/\\/g, '/');
+    const rel = fullName.slice(rootPrefix.length).replace(/^\/+/, '');
+    if (!/\.html?$/i.test(rel)) continue;
+    if (normalizedSubpath && rel !== normalizedSubpath && !rel.startsWith(normalizedSubpath + '/')) continue;
+
+    const parts = rel.split('/');
+    const fileName = parts[parts.length - 1];
+    const dirParts = parts.slice(0, -1);
+
+    if (dirParts.some((d) => IGNORE_DIRS.has(d.toLowerCase()) || d.startsWith('.'))) continue;
+    if (IGNORE_FILES.test(fileName)) continue;
+
+    candidateEntries.push({
+      rel,
+      entryName: e.entryName,
+      fileName
     });
-    if (anyHtml.length > 0) {
-      htmlEntries.push(anyHtml[0]);
+  }
+
+  if (candidateEntries.length === 0) return [];
+
+  // Group HTML files by their logical directory (stripping build output folders like /dist or /build)
+  const dirToItems = new Map();
+  for (const item of candidateEntries) {
+    const lastSlash = item.rel.lastIndexOf('/');
+    const rawDir = lastSlash === -1 ? '' : item.rel.slice(0, lastSlash);
+    const logicalDir = rawDir.replace(/\/(dist|build|web|bin|export|client)$/i, '');
+    if (!dirToItems.has(logicalDir)) {
+      dirToItems.set(logicalDir, []);
+    }
+    dirToItems.get(logicalDir).push(item);
+  }
+
+  const allDirs = Array.from(dirToItems.keys()).sort((a, b) => a.length - b.length);
+
+  // Determine which directories are collection/hub containers vs single-game directories
+  const collectionDirs = new Set();
+  for (const d of allDirs) {
+    const prefix = d === '' ? '' : d + '/';
+    const descendantDirs = allDirs.filter((other) => other !== d && (d === '' || other.startsWith(prefix)));
+    const descendantIndexDirs = descendantDirs.filter((other) => {
+      const items = dirToItems.get(other) || [];
+      return items.some((it) => INDEX_SET.has(it.fileName.toLowerCase()));
+    });
+    const baseName = d ? d.split('/').pop().toLowerCase() : '';
+    const itemsInD = dirToItems.get(d) || [];
+    const hasIndexInD = itemsInD.some((it) => INDEX_SET.has(it.fileName.toLowerCase()));
+    const nonIndexItems = itemsInD.filter((it) => !INDEX_SET.has(it.fileName.toLowerCase()));
+
+    if (
+      descendantDirs.length >= 2 ||
+      (d === normalizedSubpath && descendantIndexDirs.length >= 1) ||
+      (d === normalizedSubpath && !hasIndexInD && descendantDirs.length >= 1) ||
+      (descendantDirs.length === 1 && COLLECTION_DIR_NAMES.has(baseName)) ||
+      ((d === normalizedSubpath || COLLECTION_DIR_NAMES.has(baseName)) && nonIndexItems.length >= 2) ||
+      (!hasIndexInD && nonIndexItems.length >= 2)
+    ) {
+      collectionDirs.add(d);
     }
   }
 
-  if (htmlEntries.length === 0) return [];
+  const discoveredGames = [];
+  const absorbedDirs = new Set();
 
-  const gamesMap = new Map();
-  for (const entry of htmlEntries) {
-    const fullName = entry.entryName.replace(/\\/g, '/');
-    const relName = fullName.slice(rootPrefix.length);
-    const entryDir = path.dirname(relName);
-    const normalizedDir = entryDir === '.' ? '' : entryDir;
+  for (const d of allDirs) {
+    if (absorbedDirs.has(d)) continue;
+    const items = dirToItems.get(d) || [];
 
-    let gameDirKey = normalizedDir;
-    const stripped = normalizedDir.replace(/\/(dist|build|public|web|bin|export|client)$/i, '');
-    if (stripped !== normalizedDir) {
-      gameDirKey = stripped;
-    }
+    if (collectionDirs.has(d)) {
+      // In a collection directory, index.html is a hub/menu page, while standalone named .html files are individual games
+      const nonIndexItems = items.filter((it) => !INDEX_SET.has(it.fileName.toLowerCase()));
+      for (const item of nonIndexItems) {
+        const inferredName = item.fileName.replace(/\.html?$/i, '');
+        const fullPrefix = rootPrefix ? `${rootPrefix}${d ? d + '/' : ''}` : d ? `${d}/` : '';
+        const innerEntryRel = d ? item.rel.slice(d.length + 1) : item.rel;
+        discoveredGames.push({
+          gameDir: d,
+          entryRelPath: item.rel,
+          innerEntryRel,
+          entryEntryName: item.entryName,
+          fullPrefix,
+          isStandaloneFile: true,
+          inferredName
+        });
+      }
+    } else {
+      // Single-game directory: absorb any internal descendant directories so sub-pages aren't duplicated
+      const prefix = d === '' ? '' : d + '/';
+      for (const other of allDirs) {
+        if (other !== d && (d === '' || other.startsWith(prefix))) {
+          absorbedDirs.add(other);
+        }
+      }
 
-    if (!gamesMap.has(gameDirKey)) {
-      gamesMap.set(gameDirKey, {
-        gameDir: gameDirKey,
-        entryRelPath: relName,
-        entryEntryName: entry.entryName
+      // Pick best entry HTML file in this directory
+      let chosenItem = null;
+      for (const idxName of INDEX_PRIORITY) {
+        const match = items.find((it) => it.fileName.toLowerCase() === idxName);
+        if (match) {
+          chosenItem = match;
+          break;
+        }
+      }
+      if (!chosenItem) {
+        chosenItem = items[0];
+      }
+
+      const isIndex = INDEX_SET.has(chosenItem.fileName.toLowerCase());
+      const dirBase = d ? d.split('/').pop() : '';
+      const inferredName = (!isIndex && !dirBase)
+        ? chosenItem.fileName.replace(/\.html?$/i, '')
+        : (dirBase || chosenItem.fileName.replace(/\.html?$/i, ''));
+
+      const fullPrefix = rootPrefix ? `${rootPrefix}${d ? d + '/' : ''}` : d ? `${d}/` : '';
+      const innerEntryRel = d ? chosenItem.rel.slice(d.length + 1) : chosenItem.rel;
+
+      discoveredGames.push({
+        gameDir: d,
+        entryRelPath: chosenItem.rel,
+        innerEntryRel,
+        entryEntryName: chosenItem.entryName,
+        fullPrefix,
+        isStandaloneFile: false,
+        inferredName
       });
     }
   }
 
-  const dirs = Array.from(gamesMap.keys());
-  let targetDirs = dirs;
-  if (dirs.length > 1 && dirs.includes('')) {
-    targetDirs = dirs.filter((d) => d !== '');
-  }
-
-  return targetDirs.map((dirKey) => {
-    const item = gamesMap.get(dirKey);
-    const fullPrefix = rootPrefix
-      ? `${rootPrefix}${item.gameDir ? item.gameDir + '/' : ''}`
-      : item.gameDir
-      ? `${item.gameDir}/`
-      : '';
-    return {
-      gameDir: item.gameDir,
-      entryRelPath: item.entryRelPath,
-      entryEntryName: item.entryEntryName,
-      fullPrefix
-    };
-  });
+  return discoveredGames;
 }
 
 // Extract files belonging to a specific game with Zip-Slip path traversal defense
-function extractGameAssets(zip, gameItem, targetDir) {
+function extractGameAssets(zip, gameItem, targetDir, allDetectedGames = []) {
   fs.mkdirSync(targetDir, { recursive: true });
   const prefix = gameItem.fullPrefix;
   const entries = zip.getEntries();
+
+  // If this is a standalone HTML file in a shared directory, don't copy sibling standalone HTML games or other game folders
+  const otherGameDirs = new Set();
+  const otherStandaloneEntries = new Set();
+  if (gameItem.isStandaloneFile) {
+    for (const other of allDetectedGames) {
+      if (other.entryRelPath === gameItem.entryRelPath) continue;
+      if (other.gameDir && other.gameDir !== gameItem.gameDir) {
+        const relDir = gameItem.gameDir
+          ? other.gameDir.slice(gameItem.gameDir.length + 1)
+          : other.gameDir;
+        if (relDir) otherGameDirs.add(relDir.split('/')[0]);
+      } else if (other.gameDir === gameItem.gameDir && other.innerEntryRel) {
+        otherStandaloneEntries.add(other.innerEntryRel.toLowerCase());
+      }
+    }
+    otherStandaloneEntries.add('index.html');
+    otherStandaloneEntries.add('index.htm');
+  }
 
   for (const entry of entries) {
     const name = entry.entryName.replace(/\\/g, '/');
@@ -506,6 +616,12 @@ function extractGameAssets(zip, gameItem, targetDir) {
 
     const innerRel = prefix ? name.slice(prefix.length) : name;
     if (!innerRel || innerRel === '/') continue;
+
+    if (gameItem.isStandaloneFile) {
+      const topSeg = innerRel.split('/')[0];
+      if (otherGameDirs.has(topSeg)) continue;
+      if (!innerRel.includes('/') && otherStandaloneEntries.has(innerRel.toLowerCase())) continue;
+    }
 
     const normalized = path.normalize(innerRel);
     if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
@@ -525,6 +641,9 @@ function extractGameAssets(zip, gameItem, targetDir) {
     }
   }
 
+  if (gameItem.innerEntryRel && fs.existsSync(path.join(targetDir, gameItem.innerEntryRel))) {
+    return gameItem.innerEntryRel.replace(/\\/g, '/');
+  }
   return findEntryHtml(targetDir) || 'index.html';
 }
 
@@ -532,8 +651,12 @@ function extractGameAssets(zip, gameItem, targetDir) {
 function cleanExtractedTitle(rawTitle) {
   if (!rawTitle) return '';
   let t = rawTitle.trim();
-  t = t.replace(/\s*[-|•–—]\s*(GitHub|HTML5(?:\s*Canvas)?(?:\s*Game)?|Free Online Game|Play Online|Canvas Game|JavaScript Game|Browser Game).*$/i, '').trim();
-  if (t && !/^(document|webpack app|vite app|react app|index|untitled|html5 game)$/i.test(t)) {
+  t = t.replace(/^Unity WebGL Player\s*[-|•–—:]\s*/i, '').trim();
+  t = t.replace(/\s*[-|•–—]\s*(GitHub|Unity WebGL Player|HTML5(?:\s*Canvas)?(?:\s*Game)?|Free Online Game|Play Online|Canvas Game|JavaScript Game|Browser Game|Unblocked).*$/i, '').trim();
+  if (
+    t &&
+    !/^(document|webpack app|vite app|react app|index|untitled|html5 game|html5|game|my game|new game|play|home|main|test|app|application|unity webgl player|webgl|scratch|turbowarp|construct 2|construct 3|gamemaker|phaser|canvas|page|welcome|template|default|loader|emulator|player)$/i.test(t)
+  ) {
     return t;
   }
   return '';
@@ -556,16 +679,18 @@ function isSameGame(titleA, titleB) {
   return keysA.some((k) => keysB.includes(k));
 }
 
-// Find existing game in library by title or repo source
-function findExistingGame(title, repoFullName, gameDir, existingGames) {
+// Find existing game in library by title or repo source path
+function findExistingGame(title, repoFullName, entryRelPath, gameDir, existingGames) {
   for (const g of existingGames) {
     if (title && g.title && isSameGame(title, g.title)) {
       return g;
     }
     if (repoFullName && g.sourceRepo && g.sourceRepo.toLowerCase() === repoFullName.toLowerCase()) {
-      const gDir = (g.sourceDir || '').toLowerCase();
-      const targetDir = (gameDir || '').toLowerCase();
-      if (gDir === targetDir) {
+      if (g.sourcePath && entryRelPath) {
+        if (g.sourcePath.toLowerCase() === entryRelPath.toLowerCase()) {
+          return g;
+        }
+      } else if (g.sourceDir && gameDir && g.sourceDir.toLowerCase() === gameDir.toLowerCase()) {
         return g;
       }
     }
@@ -574,8 +699,10 @@ function findExistingGame(title, repoFullName, gameDir, existingGames) {
 }
 
 // Fast pre-extraction title peek directly from the zip in memory
-function peekGameTitle(zip, gameItem, repoInfo) {
+function peekGameTitle(zip, gameItem, repoInfo, usedTitlesInRepo = new Set()) {
   let title = '';
+  const fallbackTitle = formatSlugToTitle(gameItem.inferredName || gameItem.gameDir || repoInfo.repo);
+
   if (gameItem.entryEntryName) {
     try {
       const entry = zip.getEntry(gameItem.entryEntryName);
@@ -591,21 +718,22 @@ function peekGameTitle(zip, gameItem, repoInfo) {
     }
   }
 
+  if (title && usedTitlesInRepo.has(title.toLowerCase()) && fallbackTitle && fallbackTitle.toLowerCase() !== title.toLowerCase()) {
+    title = fallbackTitle;
+  }
+
   if (!title) {
-    const rawName = gameItem.gameDir ? path.basename(gameItem.gameDir) : repoInfo.repo;
-    title = rawName
-      .replace(/[-_]+/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-      .trim();
+    title = fallbackTitle;
   }
 
   return title;
 }
 
 // Extract game metadata (title, category, author, description)
-function extractGameMetadata(targetDir, entryHtmlRel, gameItem, repoInfo, defaultCategory) {
+function extractGameMetadata(targetDir, entryHtmlRel, gameItem, repoInfo, defaultCategory, usedTitlesInRepo = new Set()) {
   let title = '';
   let description = '';
+  const fallbackTitle = formatSlugToTitle(gameItem.inferredName || gameItem.gameDir || repoInfo.repo);
 
   const indexHtmlPath = path.join(targetDir, entryHtmlRel);
   if (fs.existsSync(indexHtmlPath)) {
@@ -624,12 +752,12 @@ function extractGameMetadata(targetDir, entryHtmlRel, gameItem, repoInfo, defaul
     }
   }
 
+  if (title && usedTitlesInRepo.has(title.toLowerCase()) && fallbackTitle && fallbackTitle.toLowerCase() !== title.toLowerCase()) {
+    title = fallbackTitle;
+  }
+
   if (!title) {
-    const rawName = gameItem.gameDir ? path.basename(gameItem.gameDir) : repoInfo.repo;
-    title = rawName
-      .replace(/[-_]+/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-      .trim();
+    title = fallbackTitle;
   }
 
   let category = defaultCategory || 'Arcade';
@@ -761,14 +889,23 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
         message: `Discovered ${detectedGames.length} game(s) in ${parsed.fullName}`
       });
 
+      const usedTitlesInRepo = new Set();
+
       for (let gIdx = 0; gIdx < detectedGames.length; gIdx++) {
         const gameItem = detectedGames[gIdx];
 
         // Step 1: Pre-check if game already exists before extracting assets
-        const peekedTitle = peekGameTitle(zip, gameItem, parsed);
-        const existingBefore = findExistingGame(peekedTitle, parsed.fullName, gameItem.gameDir, existingGames);
+        const peekedTitle = peekGameTitle(zip, gameItem, parsed, usedTitlesInRepo);
+        const existingBefore = findExistingGame(
+          peekedTitle,
+          parsed.fullName,
+          gameItem.entryRelPath,
+          gameItem.gameDir,
+          existingGames
+        );
 
         if (existingBefore) {
+          usedTitlesInRepo.add(peekedTitle.toLowerCase());
           skippedGames.push({
             title: peekedTitle,
             existingTitle: existingBefore.title,
@@ -796,12 +933,26 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
           message: `Extracting game ${gIdx + 1}/${detectedGames.length} from ${parsed.fullName}...`
         });
 
-        const entryHtmlRel = extractGameAssets(zip, gameItem, targetGameDir);
-        const meta = extractGameMetadata(targetGameDir, entryHtmlRel, gameItem, parsed, defaultCategory);
+        const entryHtmlRel = extractGameAssets(zip, gameItem, targetGameDir, detectedGames);
+        const meta = extractGameMetadata(
+          targetGameDir,
+          entryHtmlRel,
+          gameItem,
+          parsed,
+          defaultCategory,
+          usedTitlesInRepo
+        );
 
         // Step 2: Post-metadata verification in case full HTML yielded a matching title
-        const existingAfter = findExistingGame(meta.title, parsed.fullName, gameItem.gameDir, existingGames);
+        const existingAfter = findExistingGame(
+          meta.title,
+          parsed.fullName,
+          gameItem.entryRelPath,
+          gameItem.gameDir,
+          existingGames
+        );
         if (existingAfter) {
+          usedTitlesInRepo.add(meta.title.toLowerCase());
           try {
             fs.rmSync(targetGameDir, { recursive: true, force: true });
           } catch {}
@@ -824,6 +975,8 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
           });
           continue;
         }
+
+        usedTitlesInRepo.add(meta.title.toLowerCase());
 
         sendEvent('log', {
           level: 'info',
@@ -853,7 +1006,7 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
           }
 
           if (!coverUrl) {
-            const iconCandidates = ['icon.png', 'favicon.ico', 'cover.png', 'logo.png', 'thumbnail.png'];
+            const iconCandidates = ['icon.png', 'favicon.ico', 'cover.png', 'logo.png', 'thumbnail.png', 'splash.png'];
             for (const cand of iconCandidates) {
               const candPath = path.join(targetGameDir, cand);
               if (fs.existsSync(candPath)) {
@@ -877,6 +1030,7 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
           sourceType: 'file',
           sourceRepo: parsed.fullName,
           sourceDir: gameItem.gameDir || '',
+          sourcePath: gameItem.entryRelPath,
           playUrl: `/uploads/games/${gameId}/${entryHtmlRel}`,
           coverUrl,
           createdAt: new Date().toISOString()
@@ -889,7 +1043,8 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
         sendEvent('game_imported', {
           game: newGame,
           progress: {
-            current: importedGames.length,
+            current: gIdx + 1,
+            totalInRepo: detectedGames.length,
             repo: parsed.fullName
           }
         });

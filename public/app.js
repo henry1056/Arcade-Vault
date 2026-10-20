@@ -828,89 +828,498 @@
     return keysA.some((k) => keysB.includes(k));
   }
 
+  // Format a folder or file slug into a clean human-readable game title
+  function formatSlugToTitle(slug) {
+    return String(slug || '')
+      .replace(/\.html?$/i, '')
+      .replace(/[-_]+/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/\s+/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim();
+  }
+
+  // Parse GitHub URL or shorthand (e.g. "owner/repo", "https://github.com/owner/repo/tree/branch/subpath")
+  function parseGitHubUrlClient(input) {
+    let str = String(input || '').trim();
+    if (!str) return null;
+    str = str.replace(/^\[.*?\]\((.*?)\)$/, '$1').trim();
+    str = str.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '');
+    str = str.replace(/\.git$/i, '');
+    str = str.replace(/\/+$/, '');
+    const parts = str.split('/').filter(Boolean);
+    if (parts.length < 2) return null;
+    const owner = parts[0];
+    const repo = parts[1];
+    let branch = null;
+    let subpath = null;
+    if (parts[2] === 'tree' && parts[3]) {
+      branch = parts[3];
+      if (parts.length > 4) {
+        subpath = parts.slice(4).join('/');
+      }
+    }
+    return { owner, repo, branch, subpath, fullName: `${owner}/${repo}` };
+  }
+
+  // Fetch the full list of files in a GitHub repository (with multi-tier fallbacks)
+  async function fetchRepoTreeClient(owner, repo, branch, subpath, githubToken) {
+    const ghHeaders = { Accept: 'application/vnd.github+json' };
+    if (githubToken) {
+      ghHeaders['Authorization'] = `Bearer ${githubToken}`;
+    }
+
+    const IGNORE_TOP_DIRS = new Set([
+      '.git', '.github', '.vscode', '.idea', 'node_modules', 'bower_components',
+      'vendor', 'vendors', 'docs', 'doc', 'test', 'tests', '__tests__', 'spec',
+      'specs', 'css', 'js', 'scripts', 'styles', 'fonts', 'images', 'img',
+      'audio', 'sound', 'sounds', 'media', 'static', 'templates', 'routes', 'partials'
+    ]);
+
+    // 1. Primary: GitHub Git Trees API (recursive=1)
+    const branchesToTry = branch ? [branch] : ['HEAD', 'main', 'master', 'gh-pages'];
+    for (const b of branchesToTry) {
+      try {
+        const treeUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(b)}?recursive=1`;
+        const res = await fetch(treeUrl, { headers: ghHeaders });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.tree)) {
+            const files = data.tree
+              .filter((item) => item.type === 'blob' && item.path)
+              .map((item) => item.path);
+
+            // If repository is massive and tree was truncated by GitHub (>100k files), synthesize index.html for truncated game folders
+            if (data.truncated) {
+              const normSub = subpath ? subpath.replace(/^\/+|\/+$/g, '') : '';
+              const dirs = data.tree.filter((item) => item.type === 'tree' && item.path);
+              for (const d of dirs) {
+                const p = d.path;
+                const relToSub = normSub ? (p.startsWith(normSub + '/') ? p.slice(normSub.length + 1) : null) : p;
+                if (!relToSub || relToSub.includes('/')) continue;
+                if (IGNORE_TOP_DIRS.has(relToSub.toLowerCase()) || relToSub.startsWith('.')) continue;
+                const hasFileInside = files.some((f) => f.startsWith(p + '/'));
+                if (!hasFileInside) {
+                  files.push(`${p}/index.html`);
+                }
+              }
+            }
+
+            return { files, branch: b };
+          }
+        }
+      } catch {
+        // Try next
+      }
+    }
+
+    // 2. Secondary Fallback: jsDelivr Package Flat API (no GitHub rate limits)
+    const jsdBranches = branch ? [branch] : ['main', 'master', 'gh-pages'];
+    for (const b of jsdBranches) {
+      try {
+        const jsdUrl = `https://data.jsdelivr.com/v1/package/gh/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}@${encodeURIComponent(b)}/flat`;
+        const res = await fetch(jsdUrl);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.files) && data.files.length > 0) {
+            const files = data.files
+              .map((f) => String(f.name || '').replace(/^\/+/, ''))
+              .filter(Boolean);
+            return { files, branch: b };
+          }
+        }
+      } catch {
+        // Try next
+      }
+    }
+
+    // 3. Tertiary Fallback: GitHub Contents API for root / subpath directory
+    try {
+      const contentsPath = subpath ? subpath.replace(/^\/+|\/+$/g, '') : '';
+      const refQuery = branch ? `?ref=${encodeURIComponent(branch)}` : '';
+      const contentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${contentsPath}${refQuery}`;
+      const res = await fetch(contentsUrl, { headers: ghHeaders });
+      if (res.ok) {
+        const items = await res.json();
+        if (Array.isArray(items)) {
+          const files = [];
+          for (const item of items) {
+            if (item.type === 'file' && item.path) {
+              files.push(item.path);
+            } else if (item.type === 'dir' && item.path && item.name) {
+              if (!IGNORE_TOP_DIRS.has(item.name.toLowerCase()) && !item.name.startsWith('.')) {
+                files.push(`${item.path}/index.html`);
+              }
+            }
+          }
+          if (files.length > 0) {
+            return { files, branch: branch || 'HEAD' };
+          }
+        }
+      }
+    } catch {
+      // Ignore
+    }
+
+    throw new Error(`Could not read repository file tree for ${owner}/${repo}. Verify the repo is public or provide a GitHub token.`);
+  }
+
+  // Scan repository file paths to discover all individual playable HTML5 games
+  function scanRepoPathsForGamesClient(allPaths, subpath = '') {
+    const normalizedSubpath = subpath ? subpath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
+
+    const IGNORE_DIRS = new Set([
+      'node_modules', '.git', '.github', '.vscode', '.idea', 'bower_components',
+      'vendor', 'vendors', 'docs', 'doc', 'test', 'tests', '__tests__', 'spec',
+      'specs', 'coverage', 'partials', 'templates', 'includes', 'components'
+    ]);
+
+    const IGNORE_FILES = /^(404|403|500|error|readme|license|copying|privacy|terms|tos|contact|about|credits|changelog|help|instructions|faq|offline|blank|empty|template|test|spec|oauth|callback|login|signup|register|header|footer|nav|sidebar|modal|popup|ad|ads|google[0-9a-f]+)\.html?$/i;
+
+    const INDEX_PRIORITY = ['index.html', 'index.htm', 'game.html', 'play.html', 'main.html', 'start.html', 'launch.html'];
+    const INDEX_SET = new Set(INDEX_PRIORITY);
+
+    const COLLECTION_DIR_NAMES = new Set([
+      'games', 'game', 'projects', 'project', 'gfiles', 'html5', 'arcade',
+      'roms', 'collection', 'collections', 'apps', 'play', 'webgames', 'files',
+      'list', 'all', 'public', 'src', 'static', 'pages'
+    ]);
+
+    const candidateEntries = [];
+    for (const rawPath of allPaths) {
+      const rel = String(rawPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+      if (!/\.html?$/i.test(rel)) continue;
+      if (normalizedSubpath && rel !== normalizedSubpath && !rel.startsWith(normalizedSubpath + '/')) continue;
+
+      const parts = rel.split('/');
+      const fileName = parts[parts.length - 1];
+      const dirParts = parts.slice(0, -1);
+
+      if (dirParts.some((d) => IGNORE_DIRS.has(d.toLowerCase()) || d.startsWith('.'))) continue;
+      if (IGNORE_FILES.test(fileName)) continue;
+
+      candidateEntries.push({ rel, fileName });
+    }
+
+    if (candidateEntries.length === 0) return [];
+
+    // Group HTML files by their logical directory (stripping build output folders like /dist or /build)
+    const dirToItems = new Map();
+    for (const item of candidateEntries) {
+      const lastSlash = item.rel.lastIndexOf('/');
+      const rawDir = lastSlash === -1 ? '' : item.rel.slice(0, lastSlash);
+      const logicalDir = rawDir.replace(/\/(dist|build|web|bin|export|client)$/i, '');
+      if (!dirToItems.has(logicalDir)) {
+        dirToItems.set(logicalDir, []);
+      }
+      dirToItems.get(logicalDir).push(item);
+    }
+
+    const allDirs = Array.from(dirToItems.keys()).sort((a, b) => a.length - b.length);
+
+    // Determine which directories are collection/hub containers vs single-game directories
+    const collectionDirs = new Set();
+    for (const d of allDirs) {
+      const prefix = d === '' ? '' : d + '/';
+      const descendantDirs = allDirs.filter((other) => other !== d && (d === '' || other.startsWith(prefix)));
+      const descendantIndexDirs = descendantDirs.filter((other) => {
+        const items = dirToItems.get(other) || [];
+        return items.some((it) => INDEX_SET.has(it.fileName.toLowerCase()));
+      });
+      const baseName = d ? d.split('/').pop().toLowerCase() : '';
+      const itemsInD = dirToItems.get(d) || [];
+      const hasIndexInD = itemsInD.some((it) => INDEX_SET.has(it.fileName.toLowerCase()));
+      const nonIndexItems = itemsInD.filter((it) => !INDEX_SET.has(it.fileName.toLowerCase()));
+
+      if (
+        descendantDirs.length >= 2 ||
+        (d === normalizedSubpath && descendantIndexDirs.length >= 1) ||
+        (d === normalizedSubpath && !hasIndexInD && descendantDirs.length >= 1) ||
+        (descendantDirs.length === 1 && COLLECTION_DIR_NAMES.has(baseName)) ||
+        ((d === normalizedSubpath || COLLECTION_DIR_NAMES.has(baseName)) && nonIndexItems.length >= 2) ||
+        (!hasIndexInD && nonIndexItems.length >= 2)
+      ) {
+        collectionDirs.add(d);
+      }
+    }
+
+    const discoveredGames = [];
+    const absorbedDirs = new Set();
+
+    for (const d of allDirs) {
+      if (absorbedDirs.has(d)) continue;
+      const items = dirToItems.get(d) || [];
+
+      if (collectionDirs.has(d)) {
+        // In a collection directory, index.html is a hub/menu page, while standalone named .html files are individual games
+        const nonIndexItems = items.filter((it) => !INDEX_SET.has(it.fileName.toLowerCase()));
+        for (const item of nonIndexItems) {
+          const inferredName = item.fileName.replace(/\.html?$/i, '');
+          discoveredGames.push({
+            gameDir: d,
+            entryRelPath: item.rel,
+            isStandaloneFile: true,
+            inferredName
+          });
+        }
+      } else {
+        // Single-game directory: absorb any internal descendant directories so sub-pages aren't duplicated
+        const prefix = d === '' ? '' : d + '/';
+        for (const other of allDirs) {
+          if (other !== d && (d === '' || other.startsWith(prefix))) {
+            absorbedDirs.add(other);
+          }
+        }
+
+        // Pick best entry HTML file in this directory
+        let chosenItem = null;
+        for (const idxName of INDEX_PRIORITY) {
+          const match = items.find((it) => it.fileName.toLowerCase() === idxName);
+          if (match) {
+            chosenItem = match;
+            break;
+          }
+        }
+        if (!chosenItem) {
+          chosenItem = items[0];
+        }
+
+        const isIndex = INDEX_SET.has(chosenItem.fileName.toLowerCase());
+        const dirBase = d ? d.split('/').pop() : '';
+        const inferredName = (!isIndex && !dirBase)
+          ? chosenItem.fileName.replace(/\.html?$/i, '')
+          : (dirBase || chosenItem.fileName.replace(/\.html?$/i, ''));
+
+        discoveredGames.push({
+          gameDir: d,
+          entryRelPath: chosenItem.rel,
+          isStandaloneFile: false,
+          inferredName
+        });
+      }
+    }
+
+    return discoveredGames;
+  }
+
+  // Find a cover image inside the repository file list for a given game folder
+  function findRepoIconForGame(allPaths, gameDir, owner, repo, branch) {
+    const ICON_NAMES = ['icon.png', 'icon.jpg', 'icon.webp', 'logo.png', 'cover.png', 'cover.jpg', 'thumb.png', 'thumbnail.png', 'splash.png', 'favicon.png', 'favicon.ico', 'apple-touch-icon.png'];
+    const prefix = gameDir ? `${gameDir}/` : '';
+    const dirFiles = allPaths.filter((p) => (prefix ? p.startsWith(prefix) : !p.includes('/')));
+
+    for (const iconName of ICON_NAMES) {
+      const match = dirFiles.find((p) => p.slice(prefix.length).toLowerCase() === iconName);
+      if (match) {
+        const encodedPath = match.split('/').map(encodeURIComponent).join('/');
+        return `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${encodedPath}`;
+      }
+    }
+    return null;
+  }
+
+  // Infer category from game title when Auto/All is selected
+  function inferCategoryFromTitle(title, defaultCategory) {
+    if (defaultCategory && defaultCategory !== 'Auto' && defaultCategory !== 'All') {
+      return defaultCategory;
+    }
+    const lower = String(title || '').toLowerCase();
+    if (/puzzle|2048|tetris|match|block|sudoku|chess|wordle|minesweeper|cut the rope/i.test(lower)) return 'Puzzle';
+    if (/mario|sonic|retro|arcade|pacman|pac-man|space invaders|galaga|asteroids|pong|snake|atari|nes|gba|doom/i.test(lower)) return 'Retro';
+    if (/platform|jump|runner|run|climb|vex|geometry dash|ovo|doodle/i.test(lower)) return 'Platformer';
+    if (/strategy|defense|tower|card|tactics|bloons|idle|clicker|tycoon/i.test(lower)) return 'Strategy';
+    if (/rpg|quest|adventure|dungeon|pokemon|zelda|final fantasy/i.test(lower)) return 'RPG';
+    if (/action|shooter|bullet|fight|combat|ninja|racing|hexgl|drive|speed|slope|1v1|krunker|gun/i.test(lower)) return 'Action';
+    return 'Arcade';
+  }
+
   // Client-side fallback mass import (for Cloudflare Pages static hosting)
-  async function handleClientSideMassImport(lines, defaultCategory, autoPickFirstIcon) {
+  async function handleClientSideMassImport(lines, defaultCategory, autoPickFirstIcon, githubToken = '') {
     let importedCount = 0;
     let skippedCount = 0;
+    let errorCount = 0;
+
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
-      let clean = raw.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/\.git$/i, '').replace(/\/+$/, '');
-      const parts = clean.split('/').filter(Boolean);
-      if (parts.length < 2) continue;
-      const owner = parts[0];
-      const repo = parts[1];
-      const repoFullName = `${owner}/${repo}`;
-
-      appendMassConsole(`[${i + 1}/${lines.length}] Processing ${repoFullName}...`, 'info');
-
-      const title = repo
-        .replace(/[-_]+/g, ' ')
-        .replace(/\b\w/g, (c) => c.toUpperCase());
-
-      // Check if this game is already in our library
-      const alreadyExists = allGames.find((g) => {
-        if (g.sourceRepo && g.sourceRepo.toLowerCase() === repoFullName.toLowerCase()) return true;
-        if (g.title && isSameGame(g.title, title)) return true;
-        return false;
-      });
-
-      if (alreadyExists) {
-        skippedCount++;
-        appendMassConsole(`⏭️ Skipped "${title}" from ${repoFullName} (already in library as "${alreadyExists.title}")`, 'warn');
+      const parsed = parseGitHubUrlClient(raw);
+      if (!parsed) {
+        errorCount++;
+        appendMassConsole(`Invalid GitHub repository URL format: "${raw}"`, 'error');
         continue;
       }
 
-      // HTML5 game embed wrapper for static hosting (HEAD automatically targets default branch: main or master)
-      const playUrl = `https://htmlpreview.github.io/?https://github.com/${owner}/${repo}/blob/HEAD/index.html`;
+      const { owner, repo, branch, subpath, fullName: repoFullName } = parsed;
+      appendMassConsole(`[${i + 1}/${lines.length}] Scanning repository ${repoFullName} for games...`, 'info');
+      massStatusLabel.textContent = `Scanning ${repoFullName}...`;
 
-      let coverUrl = null;
-      if (autoPickFirstIcon) {
-        appendMassConsole(`Searching Google Images for "${title} icon" (auto-picking 1st result)...`, 'info');
-        const iconData = await clientIconSearch(title);
-        if (iconData?.results?.length > 0) {
-          coverUrl = iconData.results[0].thumbnailUrl || iconData.results[0].url;
-          appendMassConsole(`Applied 1st icon result for "${title}"`, 'success');
+      let treeData;
+      try {
+        treeData = await fetchRepoTreeClient(owner, repo, branch, subpath, githubToken);
+      } catch (err) {
+        errorCount++;
+        appendMassConsole(`Failed to scan ${repoFullName}: ${err.message}`, 'error');
+        continue;
+      }
+
+      const resolvedBranch = treeData.branch || branch || 'HEAD';
+      let detectedGames = scanRepoPathsForGamesClient(treeData.files, subpath);
+
+      // Check if the repo also defines a games.json / projects.json catalog when <= 1 HTML game was found
+      if (detectedGames.length <= 1) {
+        const jsonCatalogPath = treeData.files.find((f) => /^(?:data\/|assets\/|public\/)?(?:games|projects|list)\.json$/i.test(f));
+        if (jsonCatalogPath) {
+          try {
+            const rawJsonUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(resolvedBranch)}/${jsonCatalogPath}`;
+            const jRes = await fetch(rawJsonUrl);
+            if (jRes.ok) {
+              const jData = await jRes.json();
+              const arr = Array.isArray(jData) ? jData : (Array.isArray(jData?.games) ? jData.games : []);
+              const jsonGames = [];
+              for (const item of arr) {
+                const gTitle = item?.title || item?.name;
+                const gPath = item?.url || item?.playUrl || item?.link || item?.path || item?.file || item?.directory;
+                if (gTitle && gPath) {
+                  const cleanPath = String(gPath).replace(/^\/+/, '');
+                  const isExternal = /^https?:\/\//i.test(cleanPath);
+                  const entryRel = isExternal ? cleanPath : (/\.html?$/i.test(cleanPath) ? cleanPath : `${cleanPath.replace(/\/+$/, '')}/index.html`);
+                  jsonGames.push({
+                    gameDir: isExternal ? '' : entryRel.split('/').slice(0, -1).join('/'),
+                    entryRelPath: entryRel,
+                    externalPlayUrl: isExternal ? cleanPath : null,
+                    externalCoverUrl: item?.image || item?.icon || item?.img || item?.cover || item?.coverUrl || null,
+                    isStandaloneFile: false,
+                    inferredName: gTitle
+                  });
+                }
+              }
+              if (jsonGames.length > detectedGames.length) {
+                detectedGames = jsonGames;
+              }
+            }
+          } catch {
+            // Ignore JSON catalog parse errors
+          }
         }
       }
 
-      let category = defaultCategory;
-      if (category === 'Auto' || category === 'All') {
-        const lower = title.toLowerCase();
-        if (/puzzle|2048|tetris|match|block/i.test(lower)) category = 'Puzzle';
-        else if (/retro|arcade|pacman|space/i.test(lower)) category = 'Retro';
-        else if (/racing|hexgl|drive|speed/i.test(lower)) category = 'Action';
-        else category = 'Arcade';
+      if (detectedGames.length === 0) {
+        errorCount++;
+        appendMassConsole(`No playable HTML5 game files found in ${repoFullName}.`, 'warn');
+        continue;
       }
 
-      const newGame = {
-        id: crypto.randomUUID(),
-        title,
-        category,
-        author: owner,
-        description: `Imported from GitHub: ${owner}/${repo}`,
-        sourceType: 'url',
-        sourceRepo: repoFullName,
-        playUrl,
-        coverUrl,
-        createdAt: new Date().toISOString()
-      };
+      appendMassConsole(`Discovered ${detectedGames.length} game(s) in ${repoFullName}!`, 'success');
 
-      allGames.unshift(newGame);
-      await idbSaveGame(newGame);
-      renderGames();
-      importedCount++;
+      // If this repo has multiple games and a legacy single-repo placeholder exists from an older import, remove that placeholder
+      if (detectedGames.length > 1) {
+        const repoTitleGuess = formatSlugToTitle(repo);
+        const placeholderIdx = allGames.findIndex(
+          (g) =>
+            g.sourceRepo &&
+            g.sourceRepo.toLowerCase() === repoFullName.toLowerCase() &&
+            !g.sourcePath &&
+            isSameGame(g.title, repoTitleGuess)
+        );
+        if (placeholderIdx !== -1) {
+          const [removedPlaceholder] = allGames.splice(placeholderIdx, 1);
+          await idbDeleteGame(removedPlaceholder.id);
+          renderGames();
+          appendMassConsole(`Replaced old single-repo entry "${removedPlaceholder.title}" with ${detectedGames.length} individual games.`, 'info');
+        }
+      }
 
-      appendMassConsole(`Added "${title}" (${category}) to local arcade!`, 'success');
-      const pct = Math.round(((i + 1) / lines.length) * 100);
-      massImportProgress.value = pct;
-      massProgressPercent.textContent = `${pct}%`;
+      for (let gIdx = 0; gIdx < detectedGames.length; gIdx++) {
+        const gameItem = detectedGames[gIdx];
+        const rawSlug = gameItem.inferredName || gameItem.gameDir || repo;
+        const title = formatSlugToTitle(rawSlug);
+
+        // Check if this specific game is already in our library (by title or by repo + entryRelPath)
+        const alreadyExists = allGames.find((g) => {
+          if (g.title && isSameGame(g.title, title)) return true;
+          if (g.sourceRepo && g.sourceRepo.toLowerCase() === repoFullName.toLowerCase()) {
+            if (g.sourcePath && gameItem.entryRelPath && g.sourcePath.toLowerCase() === gameItem.entryRelPath.toLowerCase()) {
+              return true;
+            }
+            if (!g.sourcePath && g.sourceDir && gameItem.gameDir && g.sourceDir.toLowerCase() === gameItem.gameDir.toLowerCase()) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (alreadyExists) {
+          skippedCount++;
+          appendMassConsole(
+            `⏭️ [${gIdx + 1}/${detectedGames.length}] Skipped "${title}" from ${repoFullName} (already in library as "${alreadyExists.title}")`,
+            'warn'
+          );
+          const pct = Math.min(99, Math.round((((i + (gIdx + 1) / detectedGames.length) / lines.length) * 100)));
+          massImportProgress.value = pct;
+          massProgressPercent.textContent = `${pct}%`;
+          continue;
+        }
+
+        const encodedEntryPath = gameItem.entryRelPath.split('/').map(encodeURIComponent).join('/');
+        const playUrl =
+          gameItem.externalPlayUrl ||
+          `https://raw.githack.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(resolvedBranch)}/${encodedEntryPath}`;
+
+        let coverUrl = gameItem.externalCoverUrl || null;
+        if (coverUrl && !/^https?:\/\//i.test(coverUrl)) {
+          const cleanCover = coverUrl.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
+          coverUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(resolvedBranch)}/${cleanCover}`;
+        }
+
+        if (autoPickFirstIcon) {
+          massStatusLabel.textContent = `[${gIdx + 1}/${detectedGames.length}] Fetching icon for "${title}"...`;
+          const iconData = await clientIconSearch(title);
+          if (iconData?.results?.length > 0) {
+            coverUrl = iconData.results[0].thumbnailUrl || iconData.results[0].url;
+            appendMassConsole(`[${gIdx + 1}/${detectedGames.length}] Applied 1st icon result for "${title}"`, 'info');
+          }
+        }
+
+        if (!coverUrl) {
+          coverUrl = findRepoIconForGame(treeData.files, gameItem.gameDir, owner, repo, resolvedBranch);
+        }
+
+        const category = inferCategoryFromTitle(title, defaultCategory);
+
+        const newGame = {
+          id: crypto.randomUUID(),
+          title,
+          category,
+          author: owner,
+          description: `Imported from GitHub: ${repoFullName} (${gameItem.entryRelPath})`,
+          sourceType: 'url',
+          sourceRepo: repoFullName,
+          sourceDir: gameItem.gameDir || '',
+          sourcePath: gameItem.entryRelPath,
+          playUrl,
+          coverUrl,
+          createdAt: new Date().toISOString()
+        };
+
+        allGames.unshift(newGame);
+        await idbSaveGame(newGame);
+        renderGames();
+        importedCount++;
+
+        appendMassConsole(`🎉 [${gIdx + 1}/${detectedGames.length}] Added "${title}" (${category}) to ArcadeVault!`, 'success');
+        const pct = Math.min(99, Math.round((((i + (gIdx + 1) / detectedGames.length) / lines.length) * 100)));
+        massImportProgress.value = pct;
+        massProgressPercent.textContent = `${pct}%`;
+      }
     }
 
     massImportProgress.value = 100;
     massProgressPercent.textContent = '100%';
     const skipNotice = skippedCount ? `, ${skippedCount} skipped` : '';
     massStatusLabel.textContent = `Completed! ${importedCount} game(s) imported${skipNotice}.`;
-    appendMassConsole(`\n🏁 Static import complete! Added ${importedCount} game(s) to IndexedDB library (${skippedCount} skipped as already existing).`, 'success');
+    appendMassConsole(
+      `\n🏁 Import complete! Added ${importedCount} game(s) to library (${skippedCount} skipped as already existing, ${errorCount} errors).`,
+      'success'
+    );
 
     startMassImportBtn.disabled = false;
     const skipSummary = skippedCount > 0 ? ` (${skippedCount} skipped as already in library)` : '';
@@ -989,7 +1398,7 @@
       if (isStaticHosting || !response || response.status === 404 || response.status === 405 || response.status === 501 || response.status === 502) {
         const reason = isStaticHosting ? 'Client-Side Mode' : `HTTP ${response.status}`;
         appendMassConsole(`Static hosting environment detected (${reason}). Running client-side repository import...`, 'warn');
-        await handleClientSideMassImport(lines, defaultCategory, autoPickFirstIcon);
+        await handleClientSideMassImport(lines, defaultCategory, autoPickFirstIcon, githubToken);
         return;
       }
 
@@ -1052,7 +1461,9 @@
                 renderGames();
 
                 appendMassConsole(`🎉 Successfully added "${newGame.title}" (${newGame.category}) to ArcadeVault!`, 'success');
-                const progressPct = Math.min(95, Math.round(((totalImportedCount + totalSkippedCount) / (lines.length || 1)) * 100));
+                const denom = eventData.progress?.totalInRepo || lines.length || 1;
+                const numer = eventData.progress?.current || (totalImportedCount + totalSkippedCount);
+                const progressPct = Math.min(95, Math.round((numer / denom) * 100));
                 massImportProgress.value = progressPct;
                 massProgressPercent.textContent = `${progressPct}%`;
               } else if (eventData.type === 'complete') {
