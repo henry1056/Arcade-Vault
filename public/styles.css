@@ -1726,6 +1726,13 @@ input.user-valid-fallback {
   margin-top: 1rem;
 }
 
+
+/* Itch.io Import Modal */
+.itch-import-modal {
+  width: min(720px, 100% - 1.5rem);
+  max-width: 720px;
+}
+
 [hidden] {
   display: none !important;
 }

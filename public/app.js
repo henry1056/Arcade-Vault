@@ -345,6 +345,24 @@
   const startRedoIconsBtn = document.getElementById('start-redo-icons-btn');
   const editAutofetchIconBtn = document.getElementById('edit-autofetch-icon-btn');
 
+  // DOM Elements - itch.io Game Importer
+  const itchImportDialog = document.getElementById('itch-import-dialog');
+  const headerItchImportBtn = document.getElementById('header-itch-import-btn');
+  const bannerItchImportBtn = document.getElementById('banner-itch-import-btn');
+  const itchImportForm = document.getElementById('itch-import-form');
+  const itchUrlsInput = document.getElementById('itch-urls-input');
+  const itchCategorySelect = document.getElementById('itch-category-select');
+  const itchAutoIcon = document.getElementById('itch-auto-icon');
+  const itchProgressSection = document.getElementById('itch-progress-section');
+  const itchStatusLabel = document.getElementById('itch-status-label');
+  const itchProgressPercent = document.getElementById('itch-progress-percent');
+  const itchProgressBar = document.getElementById('itch-progress-bar');
+  const itchConsole = document.getElementById('itch-console');
+  const clearItchConsoleBtn = document.getElementById('clear-itch-console-btn');
+  const itchFormStatus = document.getElementById('itch-form-status');
+  const startItchImportBtn = document.getElementById('start-itch-import-btn');
+  const itchCancelBtn = document.getElementById('itch-cancel-btn');
+
   // DOM Elements - Edit Game Details Dialog
   const editGameDialog = document.getElementById('edit-game-dialog');
   const editGameForm = document.getElementById('edit-game-form');
@@ -417,6 +435,8 @@
     if (bannerManageReposBtn) bannerManageReposBtn.hidden = !isAdmin;
     if (headerRedoIconsBtn) headerRedoIconsBtn.hidden = !isAdmin;
     if (bannerRedoIconsBtn) bannerRedoIconsBtn.hidden = !isAdmin;
+    if (headerItchImportBtn) headerItchImportBtn.hidden = !isAdmin;
+    if (bannerItchImportBtn) bannerItchImportBtn.hidden = !isAdmin;
     footerAdminBtn.hidden = isAdmin;
 
     emptyStateDesc.textContent = isAdmin
@@ -2981,6 +3001,268 @@
         alert('Failed to fetch icon: ' + err.message);
         editAutofetchIconBtn.textContent = origText;
         editAutofetchIconBtn.disabled = false;
+      }
+    });
+  }
+
+
+  // itch.io Game Importer Logic
+  function appendItchConsole(message, level = 'info') {
+    if (!itchConsole) return;
+    const line = document.createElement('div');
+    line.className = `console-line ${level}`;
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    line.innerHTML = `<span class="console-timestamp">[${time}]</span> ${escapeHtml(message)}`;
+    itchConsole.appendChild(line);
+    itchConsole.scrollTop = itchConsole.scrollHeight;
+  }
+
+  if (clearItchConsoleBtn) {
+    clearItchConsoleBtn.addEventListener('click', () => {
+      if (itchConsole) itchConsole.innerHTML = '';
+    });
+  }
+
+  if (headerItchImportBtn) {
+    headerItchImportBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (itchImportDialog && typeof itchImportDialog.showModal === 'function' && !itchImportDialog.open) {
+        itchImportDialog.showModal();
+      }
+    });
+  }
+
+  if (bannerItchImportBtn) {
+    bannerItchImportBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (itchImportDialog && typeof itchImportDialog.showModal === 'function' && !itchImportDialog.open) {
+        itchImportDialog.showModal();
+      }
+    });
+  }
+
+  if (itchImportForm) {
+    itchImportForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (itchFormStatus) itchFormStatus.hidden = true;
+
+      if (!isAdmin) {
+        if (itchFormStatus) {
+          itchFormStatus.textContent = 'Admin sign-in is required to import itch.io games.';
+          itchFormStatus.hidden = false;
+        }
+        return;
+      }
+
+      const rawUrls = (itchUrlsInput?.value || '').trim();
+      const lines = rawUrls.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
+
+      if (lines.length === 0) {
+        if (itchFormStatus) {
+          itchFormStatus.textContent = 'Please enter at least one valid itch.io game URL.';
+          itchFormStatus.hidden = false;
+        }
+        itchUrlsInput?.focus();
+        return;
+      }
+
+      const defaultCategory = itchCategorySelect?.value || 'Auto';
+      const autoPickFirstIcon = itchAutoIcon?.checked !== false;
+
+      startItchImportBtn.disabled = true;
+      startItchImportBtn.textContent = '⏳ Downloading & Extracting...';
+      itchProgressSection.hidden = false;
+      itchProgressBar.value = 0;
+      itchProgressPercent.textContent = '0%';
+      itchStatusLabel.textContent = `Initiating itch.io download for ${lines.length} game(s)...`;
+      itchConsole.innerHTML = '';
+      appendItchConsole(`Connecting to itch.io for ${lines.length} game URL(s)... [itchio-downloader]`, 'info');
+
+      let totalImportedCount = 0;
+      let totalSkippedCount = 0;
+      let totalErrorCount = 0;
+      const sessionImportedIds = [];
+
+      try {
+        let response = null;
+        let isStaticHosting = false;
+
+        try {
+          response = await fetch('/api/admin/import-itchio', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'text/event-stream'
+            },
+            body: JSON.stringify({
+              urls: lines,
+              defaultCategory,
+              autoPickFirstIcon
+            })
+          });
+        } catch (netErr) {
+          isStaticHosting = true;
+        }
+
+        if (isStaticHosting || !response || response.status === 404 || response.status === 405 || response.status === 501 || response.status === 502) {
+          appendItchConsole('Static hosting environment detected without backend Node server daemon.', 'warn');
+          appendItchConsole('itch.io web assets cannot be directly scraped in browser due to CORS/binary constraints.', 'warn');
+          appendItchConsole('Adding as external web game entries for instant play...', 'info');
+
+          for (let i = 0; i < lines.length; i++) {
+            const url = lines[i];
+            const parsedName = url.split('/').filter(Boolean).pop() || 'itch-game';
+            const title = formatSlugToTitle(parsedName);
+            const category = inferCategoryFromTitle(title, defaultCategory);
+            const coverUrl = generateGameCoverSvg(title, category);
+
+            const newGame = {
+              id: crypto.randomUUID(),
+              title,
+              category,
+              author: 'itch.io Creator',
+              description: `Imported from itch.io (${url})`,
+              sourceType: 'itchio',
+              sourceRepo: url,
+              sourceDir: '',
+              sourcePath: '',
+              playUrl: url,
+              coverUrl,
+              createdAt: new Date().toISOString()
+            };
+
+            allGames.unshift(newGame);
+            await idbPutGame(newGame);
+            sessionImportedIds.push(newGame.id);
+            totalImportedCount++;
+            appendItchConsole(`✅ Added "${title}" as external web game`, 'success');
+          }
+
+          renderGames();
+          if (sessionImportedIds.length > 0) {
+            setLastImportedBatch(sessionImportedIds, `${sessionImportedIds.length} itch.io games`);
+          }
+          itchProgressBar.value = 100;
+          itchProgressPercent.textContent = '100%';
+          itchStatusLabel.textContent = `Finished! ${totalImportedCount} game(s) added.`;
+          startItchImportBtn.disabled = false;
+          startItchImportBtn.textContent = '🚀 Download & Import from itch.io';
+          return;
+        }
+
+        if (response.status === 401) {
+          setAdminState(false);
+          adminLoginDialog.showModal();
+          throw new Error('Admin session expired. Please sign in again.');
+        }
+
+        if (!response.ok) {
+          let errText = `HTTP ${response.status}`;
+          try {
+            const errData = await response.json();
+            if (errData.error) errText = errData.error;
+          } catch {}
+          throw new Error(errText);
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('text/event-stream') && response.body) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop();
+
+            for (const part of parts) {
+              const trimmed = part.trim();
+              if (!trimmed.startsWith('data:')) continue;
+              const jsonStr = trimmed.slice(5).trim();
+              if (!jsonStr) continue;
+
+              try {
+                const eventData = JSON.parse(jsonStr);
+
+                if (eventData.type === 'log') {
+                  appendItchConsole(eventData.message, eventData.level || 'info');
+                  if (eventData.message) itchStatusLabel.textContent = eventData.message;
+                } else if (eventData.type === 'progress') {
+                  const pct = Math.round(((eventData.current - 1) / eventData.total) * 100);
+                  itchProgressBar.value = pct;
+                  itchProgressPercent.textContent = `${pct}%`;
+                  itchStatusLabel.textContent = eventData.message || 'Processing...';
+                } else if (eventData.type === 'game_skipped') {
+                  totalSkippedCount++;
+                  appendItchConsole(`⏭️ Skipped "${eventData.title}" (${eventData.reason || 'already in library'})`, 'warn');
+                } else if (eventData.type === 'game_imported') {
+                  totalImportedCount++;
+                  const newGame = eventData.game;
+                  sessionImportedIds.push(newGame.id);
+                  const existingIdx = allGames.findIndex((g) => g.id === newGame.id);
+                  if (existingIdx !== -1) {
+                    allGames[existingIdx] = newGame;
+                  } else {
+                    allGames.unshift(newGame);
+                  }
+                  await idbPutGame(newGame);
+                  renderGames();
+                } else if (eventData.type === 'done') {
+                  totalImportedCount = eventData.totalImported ?? totalImportedCount;
+                  totalSkippedCount = eventData.totalSkipped ?? totalSkippedCount;
+                  totalErrorCount = eventData.totalErrors ?? totalErrorCount;
+                }
+              } catch (parseErr) {
+                console.warn('Failed to parse SSE event chunk:', parseErr);
+              }
+            }
+          }
+        } else {
+          const data = await response.json();
+          totalImportedCount = data.totalImported || 0;
+          totalSkippedCount = data.totalSkipped || 0;
+          totalErrorCount = data.totalErrors || 0;
+          if (Array.isArray(data.importedGames)) {
+            for (const g of data.importedGames) {
+              sessionImportedIds.push(g.id);
+              allGames.unshift(g);
+              await idbPutGame(g);
+            }
+            renderGames();
+          }
+        }
+
+        itchProgressBar.value = 100;
+        itchProgressPercent.textContent = '100%';
+        const skipTxt = totalSkippedCount > 0 ? `, ${totalSkippedCount} skipped` : '';
+        const errTxt = totalErrorCount > 0 ? `, ${totalErrorCount} error(s)` : '';
+        itchStatusLabel.textContent = `Finished! ${totalImportedCount} game(s) imported${skipTxt}${errTxt}.`;
+        appendItchConsole(`\n🏁 Import complete! Added ${totalImportedCount} game(s) to library${skipTxt}${errTxt}.`, 'success');
+
+        if (sessionImportedIds.length > 0) {
+          setLastImportedBatch(sessionImportedIds, `${sessionImportedIds.length} itch.io game(s)`);
+        }
+
+        if (itchFormStatus) {
+          itchFormStatus.textContent = `🎉 Success! Imported ${totalImportedCount} game(s) from itch.io into Arcade Vault!`;
+          itchFormStatus.className = 'form-status success';
+          itchFormStatus.hidden = false;
+        }
+      } catch (err) {
+        appendItchConsole(`Fatal error: ${err.message}`, 'error');
+        if (itchFormStatus) {
+          itchFormStatus.textContent = `Error: ${err.message}`;
+          itchFormStatus.className = 'form-status error';
+          itchFormStatus.hidden = false;
+        }
+      } finally {
+        startItchImportBtn.disabled = false;
+        startItchImportBtn.textContent = '🚀 Download & Import from itch.io';
+        renderGames();
       }
     });
   }

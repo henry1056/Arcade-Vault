@@ -56,6 +56,19 @@
         <button
           type="button"
           class="btn btn-secondary btn-sm"
+          commandfor="itch-import-dialog"
+          command="show-modal"
+          id="header-itch-import-btn"
+          title="Import free games from itch.io via itchio-downloader"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+          🎮 itch.io Import
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
           commandfor="manage-repos-dialog"
           command="show-modal"
           id="header-manage-repos-btn"
@@ -115,6 +128,19 @@
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
             </svg>
             ⚡ Mass GitHub Import
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            commandfor="itch-import-dialog"
+            command="show-modal"
+            id="banner-itch-import-btn"
+            title="Import free HTML5 and web games from itch.io"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            🎮 itch.io Importer
           </button>
           <button
             type="button"
@@ -1173,6 +1199,111 @@
         🚀 Start Redoing Icons
       </button>
     </div>
+  </dialog>
+
+  <!-- Import from itch.io Modal Dialog (Admin Only) -->
+  <dialog id="itch-import-dialog" class="modal-dialog itch-import-modal" closedby="any" aria-labelledby="itch-import-title">
+    <div class="modal-header">
+      <div class="modal-header-text">
+        <h2 id="itch-import-title">🎮 Import from itch.io</h2>
+        <span class="badge">Powered by itchio-downloader</span>
+      </div>
+      <button
+        type="button"
+        class="icon-btn"
+        commandfor="itch-import-dialog"
+        command="close"
+        aria-label="Close itch.io import dialog"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <form id="itch-import-form" novalidate>
+      <div class="modal-body">
+        <p class="dialog-lead">
+          Download free games from <a href="https://itch.io" target="_blank" rel="noopener">itch.io</a> directly into Arcade Vault. Automatically downloads HTML5 web games, discovers assets, grabs the official itch.io cover art, and saves everything for offline play.
+        </p>
+
+        <div class="field">
+          <label for="itch-urls-input">
+            itch.io Game URLs <span class="req-marker" aria-hidden="true">*</span>
+          </label>
+          <span id="itch-urls-hint" class="hint">
+            Enter one or more free itch.io game URLs (one per line). Example: <code>https://ncase.itch.io/wbwwb</code>
+          </span>
+          <textarea
+            id="itch-urls-input"
+            name="itchUrls"
+            rows="4"
+            required
+            placeholder="https://author.itch.io/game-title&#10;https://another-creator.itch.io/cool-web-game"
+            aria-describedby="itch-urls-hint"
+            aria-errormessage="itch-urls-error"
+          ></textarea>
+          <span id="itch-urls-error" class="error-msg" role="alert" aria-live="polite"></span>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label for="itch-category-select">Default Category</label>
+            <span id="itch-category-hint" class="hint">Auto-inferred from itch.io tags if Auto is selected.</span>
+            <select id="itch-category-select" name="category" aria-describedby="itch-category-hint">
+              <option value="Auto" selected>Auto-detect from tags</option>
+              <option value="Arcade">Arcade</option>
+              <option value="Action">Action</option>
+              <option value="Puzzle">Puzzle</option>
+              <option value="Platformer">Platformer</option>
+              <option value="Retro">Retro</option>
+              <option value="RPG">RPG</option>
+              <option value="Strategy">Strategy</option>
+            </select>
+          </div>
+
+          <div class="field checkbox-field" style="align-self: center; margin-top: 1.25rem;">
+            <label class="checkbox-label">
+              <input type="checkbox" id="itch-auto-icon" name="autoIcon" checked>
+              <span>Auto-save official itch.io cover art</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Live Download Progress Section -->
+        <div id="itch-progress-section" class="mass-progress-section" hidden>
+          <div class="mass-progress-header">
+            <span id="itch-status-label" class="mass-status-label">Connecting to itch.io...</span>
+            <span id="itch-progress-percent" class="mass-progress-percent">0%</span>
+          </div>
+          <progress id="itch-progress-bar" value="0" max="100" class="mass-progress-bar"></progress>
+
+          <div class="mass-console-header">
+            <span>Download &amp; Extraction Activity Log</span>
+            <button type="button" class="text-link-btn" id="clear-itch-console-btn">Clear</button>
+          </div>
+          <div id="itch-console" class="mass-import-console" role="log" aria-live="polite"></div>
+        </div>
+
+        <div id="itch-form-status" class="form-status" role="alert" aria-live="assertive" hidden></div>
+      </div>
+
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          commandfor="itch-import-dialog"
+          command="close"
+          id="itch-cancel-btn"
+        >
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary" id="start-itch-import-btn">
+          🚀 Download &amp; Import from itch.io
+        </button>
+      </div>
+    </form>
   </dialog>
 
   <script src="/app.js" defer></script>

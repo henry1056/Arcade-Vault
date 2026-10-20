@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const AdmZip = require('adm-zip');
+const { downloadGame } = require('itchio-downloader');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -1000,6 +1001,22 @@ app.post('/api/admin/redo-game-icon/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// Infer category from itch.io game metadata or title
+function inferCategoryFromItch(title, tags = [], defaultCategory = 'Auto') {
+  if (defaultCategory && defaultCategory !== 'Auto' && defaultCategory !== 'All') {
+    return defaultCategory;
+  }
+  const tagStr = (Array.isArray(tags) ? tags.join(' ') : String(tags || '')).toLowerCase();
+  const lower = (String(title || '') + ' ' + tagStr).toLowerCase();
+  if (/puzzle|2048|tetris|match|block|sudoku|chess|wordle|minesweeper|physics|logic/i.test(lower)) return 'Puzzle';
+  if (/retro|arcade|pixel|pixel-art|8-bit|16-bit|atari|nes|snes|gameboy|arcade/i.test(lower)) return 'Retro';
+  if (/platformer|platform|jump|runner|metroidvania|climb/i.test(lower)) return 'Platformer';
+  if (/strategy|tactics|tower-defense|defense|card|board|deck|management|turn-based/i.test(lower)) return 'Strategy';
+  if (/rpg|role-playing|adventure|quest|dungeon|roguelike|roguelite|story|narrative/i.test(lower)) return 'RPG';
+  if (/action|shooter|fps|bullet-hell|fighting|survival|horror|stealth|racing|sports/i.test(lower)) return 'Action';
+  return 'Arcade';
+}
+
 // POST /api/admin/mass-import-github - Mass import GitHub game repositories with automated 1st icon selection (Admin Only)
 app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
   const {
@@ -1273,6 +1290,250 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
   }
 });
 
+
+// POST /api/admin/import-itchio - Import free HTML5 web games from itch.io via itchio-downloader (Admin Only)
+app.post('/api/admin/import-itchio', requireAdmin, async (req, res) => {
+  const {
+    urls = [],
+    url = '',
+    defaultCategory = 'Auto',
+    autoPickFirstIcon = true
+  } = req.body || {};
+
+  let rawLines = [];
+  if (Array.isArray(urls) && urls.length > 0) {
+    rawLines = urls;
+  } else if (url && typeof url === 'string') {
+    rawLines = url.split(/[\r\n,]+/);
+  }
+
+  const cleanUrls = rawLines
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && /^https?:\/\//i.test(s));
+
+  if (cleanUrls.length === 0) {
+    return res.status(400).json({ error: 'Please enter at least one valid itch.io game URL.' });
+  }
+
+  const isStream = req.headers.accept?.includes('text/event-stream') || req.query.stream === '1';
+  if (isStream) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+  }
+
+  const sendEvent = (type, data) => {
+    if (isStream) {
+      res.write(`data: ${JSON.stringify({ type, timestamp: new Date().toISOString(), ...data })}\n\n`);
+    }
+  };
+
+  sendEvent('start', { totalGames: cleanUrls.length });
+
+  const importedGames = [];
+  const skippedGames = [];
+  const errors = [];
+  const existingGames = readGames();
+
+  for (let idx = 0; idx < cleanUrls.length; idx++) {
+    const itchUrl = cleanUrls[idx];
+    sendEvent('progress', {
+      current: idx + 1,
+      total: cleanUrls.length,
+      url: itchUrl,
+      message: `[${idx + 1}/${cleanUrls.length}] Connecting to ${itchUrl}...`
+    });
+    sendEvent('log', {
+      level: 'info',
+      message: `[${idx + 1}/${cleanUrls.length}] Processing ${itchUrl}...`
+    });
+
+    try {
+      const alreadyExists = existingGames.find((g) => {
+        if (g.sourceRepo && g.sourceRepo.toLowerCase() === itchUrl.toLowerCase()) return true;
+        return false;
+      });
+
+      if (alreadyExists) {
+        skippedGames.push({
+          url: itchUrl,
+          title: alreadyExists.title,
+          reason: `Already in library as "${alreadyExists.title}"`
+        });
+        sendEvent('game_skipped', {
+          url: itchUrl,
+          title: alreadyExists.title,
+          reason: 'Already in library'
+        });
+        sendEvent('log', {
+          level: 'warn',
+          message: `⏭️ Skipped "${alreadyExists.title}" (already in library)`
+        });
+        continue;
+      }
+
+      const gameId = crypto.randomUUID();
+      const targetGameDir = path.join(GAMES_DIR, gameId);
+      const tempGameDir = path.join(TMP_DIR, `itch-${gameId}`);
+      if (!fs.existsSync(tempGameDir)) fs.mkdirSync(tempGameDir, { recursive: true });
+
+      sendEvent('log', {
+        level: 'info',
+        message: 'Scraping HTML5 web assets from itch.io...'
+      });
+
+      let downloadResult;
+      try {
+        downloadResult = await downloadGame({
+          itchGameUrl: itchUrl,
+          html5: true,
+          downloadDirectory: tempGameDir,
+          retries: 2,
+          onProgress: (p) => {
+            if (p.totalBytes && p.bytesReceived) {
+              const pct = Math.round((p.bytesReceived / p.totalBytes) * 100);
+              sendEvent('download_progress', { bytesReceived: p.bytesReceived, totalBytes: p.totalBytes, percent: pct });
+            }
+          }
+        });
+      } catch (err) {
+        downloadResult = await downloadGame({
+          itchGameUrl: itchUrl,
+          downloadDirectory: tempGameDir,
+          retries: 2
+        });
+      }
+
+      if (!downloadResult || (!downloadResult.status && !downloadResult.filePath)) {
+        throw new Error(downloadResult?.message || 'Failed to download game from itch.io.');
+      }
+
+      if (!fs.existsSync(targetGameDir)) fs.mkdirSync(targetGameDir, { recursive: true });
+
+      let entryRelPath = 'index.html';
+
+      if (downloadResult.filePath && downloadResult.filePath.endsWith('.zip')) {
+        sendEvent('log', { level: 'info', message: 'Extracting downloaded game zip archive...' });
+        const zip = new AdmZip(downloadResult.filePath);
+        zip.extractAllTo(targetGameDir, true);
+        const found = findEntryHtml(targetGameDir);
+        if (!found) {
+          throw new Error('Downloaded zip archive did not contain an index.html file for web play.');
+        }
+        entryRelPath = found;
+      } else {
+        const subdirs = fs.readdirSync(tempGameDir);
+        let sourceDir = tempGameDir;
+        if (subdirs.length === 1 && fs.statSync(path.join(tempGameDir, subdirs[0])).isDirectory()) {
+          sourceDir = path.join(tempGameDir, subdirs[0]);
+        }
+        fs.cpSync(sourceDir, targetGameDir, { recursive: true });
+        const found = findEntryHtml(targetGameDir);
+        entryRelPath = found || 'index.html';
+      }
+
+      try {
+        fs.rmSync(tempGameDir, { recursive: true, force: true });
+      } catch {}
+
+      const meta = downloadResult.metaData || {};
+      const title = meta.title || formatSlugToTitle(meta.name || path.basename(itchUrl));
+      const author = meta.authors?.[0]?.name || meta.author || 'itch.io Creator';
+      const category = inferCategoryFromItch(title, meta.tags, defaultCategory);
+
+      const existingByTitle = existingGames.find((g) => g.title && isSameGame(g.title, title));
+      if (existingByTitle) {
+        try {
+          fs.rmSync(targetGameDir, { recursive: true, force: true });
+        } catch {}
+        skippedGames.push({
+          title,
+          existingTitle: existingByTitle.title,
+          url: itchUrl,
+          reason: 'Already in library'
+        });
+        sendEvent('game_skipped', {
+          title,
+          existingTitle: existingByTitle.title,
+          url: itchUrl,
+          reason: `Already in library as "${existingByTitle.title}"`
+        });
+        sendEvent('log', {
+          level: 'warn',
+          message: `⏭️ Skipped "${title}" (already in library as "${existingByTitle.title}")`
+        });
+        continue;
+      }
+
+      let coverUrl = null;
+      if (meta.coverImage) {
+        sendEvent('log', { level: 'info', message: `Saving official itch.io cover art for "${title}"...` });
+        coverUrl = await downloadAndSaveCover(gameId, [meta.coverImage]);
+      }
+      if (!coverUrl && autoPickFirstIcon) {
+        sendEvent('log', { level: 'info', message: `Searching top web icon for "${title}"...` });
+        const iconData = await searchGameIcons(title);
+        if (iconData?.results?.length > 0) {
+          coverUrl = await downloadAndSaveCover(gameId, [iconData.results[0].thumbnailUrl, iconData.results[0].url]);
+        }
+      }
+
+      const newGame = {
+        id: gameId,
+        title,
+        category,
+        author,
+        description: `Imported from itch.io: ${title} by ${author}`,
+        sourceType: 'itchio',
+        sourceRepo: itchUrl,
+        sourceDir: '',
+        sourcePath: entryRelPath,
+        playUrl: `/uploads/games/${gameId}/${entryRelPath.replace(/\\/g, '/')}`,
+        coverUrl,
+        createdAt: new Date().toISOString()
+      };
+
+      existingGames.unshift(newGame);
+      importedGames.push(newGame);
+
+      sendEvent('game_imported', { game: newGame });
+      sendEvent('log', {
+        level: 'success',
+        message: `✅ Successfully imported "${title}" by ${author}!`
+      });
+    } catch (err) {
+      console.error(`Error importing ${itchUrl}:`, err);
+      errors.push({ url: itchUrl, error: err.message });
+      sendEvent('log', {
+        level: 'error',
+        message: `❌ Failed to import ${itchUrl}: ${err.message}`
+      });
+    }
+  }
+
+  writeGames(existingGames);
+
+  sendEvent('done', {
+    totalImported: importedGames.length,
+    totalSkipped: skippedGames.length,
+    totalErrors: errors.length,
+    importedGames
+  });
+
+  if (isStream) {
+    res.end();
+  } else {
+    return res.json({
+      success: true,
+      totalImported: importedGames.length,
+      totalSkipped: skippedGames.length,
+      totalErrors: errors.length,
+      importedGames,
+      skippedGames,
+      errors
+    });
+  }
+});
 
 // GET /api/admin/imported-repos - List all repositories with games in the library (Admin Only)
 app.get('/api/admin/imported-repos', requireAdmin, (req, res) => {
