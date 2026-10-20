@@ -12,6 +12,7 @@ All Rights Reserved.
 - **⚡ Mass GitHub Repository Importer**:
   - Batch import entire GitHub repositories full of games in seconds.
   - Automatically detects single-game repos or monorepos containing multiple game directories.
+  - **Automatic Duplicate Skipping**: Automatically checks your existing library and skips any game you already have (matches title or repository path) without downloading or creating duplicate entries.
   - **Automatic #1 Google Images Icon Selection**: Automatically searches Google Images for `"<game title> icon"` and assigns the top result (#1) hands-free without manual intervention.
   - Real-time streaming progress console and status tracker.
 - **🔗 Embed Game URLs**: Option to link and embed games via external URLs.
@@ -99,14 +100,8 @@ arcade-vault/
 
 ---
 
-## 🔒 Configuration
+## 🔒 Security & Safe Extraction
 
-You can customize the port and admin credentials using environment variables:
-
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `3080` | Port for the Express web server |
-| `ADMIN_USER` | `admin` | Admin panel username |
-| `ADMIN_PASS` | `admin123` | Admin panel password |
-| `GOOGLE_API_KEY` | *(optional)* | Google Custom Search API key |
-| `GOOGLE_CSE_ID` | *(optional)* | Google Programmable Search Engine ID |
+- **Path Traversal Protection**: Game `.zip` archives are extracted using strict Zip-Slip defenses, ensuring files cannot extract outside of their isolated directory.
+- **Timing-Safe Auth**: Admin authentication uses `crypto.timingSafeEqual` and HTTP-only session cookies.
+- **Admin Isolation**: Sensitive APIs (`/api/games` write endpoints, `/api/admin/*`) require admin session authentication.
