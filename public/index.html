@@ -41,6 +41,18 @@
           </svg>
           Upload Game
         </button>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          commandfor="mass-import-dialog"
+          command="show-modal"
+          id="header-mass-import-btn"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          ⚡ Mass GitHub Import
+        </button>
         <button type="button" class="btn btn-secondary btn-sm" id="admin-logout-btn">
           Sign Out
         </button>
@@ -62,6 +74,18 @@
         <div class="admin-panel-actions">
           <button
             type="button"
+            class="btn btn-secondary"
+            commandfor="mass-import-dialog"
+            command="show-modal"
+            id="banner-mass-import-btn"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            ⚡ Mass GitHub Import
+          </button>
+          <button
+            type="button"
             class="btn btn-primary"
             commandfor="upload-dialog"
             command="show-modal"
@@ -69,7 +93,7 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
               <path d="M12 5v14M5 12h14"></path>
             </svg>
-            Upload New Game
+            Upload Single Game
           </button>
         </div>
       </div>
@@ -137,16 +161,29 @@
         </div>
         <h3>No games published yet</h3>
         <p id="empty-state-desc">Check back soon for new playable browser games.</p>
-        <button
-          type="button"
-          class="btn btn-primary"
-          commandfor="upload-dialog"
-          command="show-modal"
-          id="empty-upload-btn"
-          hidden
-        >
-          Upload Your First Game
-        </button>
+        <div class="empty-admin-actions" id="empty-admin-actions" hidden>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            commandfor="mass-import-dialog"
+            command="show-modal"
+            id="empty-mass-import-btn"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            ⚡ Mass GitHub Import
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            commandfor="upload-dialog"
+            command="show-modal"
+            id="empty-upload-btn"
+          >
+            Upload a Game
+          </button>
+        </div>
       </div>
     </section>
   </main>
@@ -471,6 +508,148 @@
         </button>
         <button type="submit" class="btn btn-primary" id="save-icon-btn" enterkeyhint="done">
           Save Selected Icon &amp; Play
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Mass GitHub Import Modal Dialog (Admin Only) -->
+  <dialog id="mass-import-dialog" class="modal-dialog mass-import-modal" closedby="any" aria-labelledby="mass-import-title">
+    <div class="modal-header">
+      <div class="modal-header-text">
+        <h2 id="mass-import-title">⚡ Mass GitHub Game Importer</h2>
+        <span class="badge badge-purple">
+          Auto #1 Google Icon
+        </span>
+      </div>
+      <button
+        type="button"
+        class="icon-btn"
+        commandfor="mass-import-dialog"
+        command="close"
+        aria-label="Close mass import dialog"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <form id="mass-import-form" novalidate>
+      <div class="modal-body">
+        <div class="mass-intro-banner">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+          </svg>
+          <div>
+            <p><strong>Batch Import Repositories Full of Games</strong></p>
+            <p class="hint">
+              Paste GitHub repository URLs. ArcadeVault extracts each game, detects playable <code>index.html</code> files (including monorepos with multiple game folders), and automatically searches Google Images for <code>"&lt;game&gt; icon"</code> to assign the <strong>first image result</strong> automatically.
+            </p>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label-row">
+            <label for="mass-github-urls">GitHub Repository URLs <span class="req-marker" aria-hidden="true">*</span></label>
+            <button type="button" class="text-link-btn" id="mass-insert-examples-btn">
+              ✨ Insert Working Examples
+            </button>
+          </div>
+          <span id="mass-urls-hint" class="hint">One URL per line. Accepts full URLs (<code>https://github.com/owner/repo</code>), shorthand (<code>owner/repo</code>), or specific branch/folder paths (<code>owner/repo/tree/main/games</code>).</span>
+          <textarea
+            id="mass-github-urls"
+            name="repoUrls"
+            rows="5"
+            placeholder="https://github.com/gabrielecirulli/2048&#10;https://github.com/alecs/hexgl&#10;https://github.com/owner/monorepo-full-of-games"
+            spellcheck="false"
+            autocorrect="off"
+            autocapitalize="off"
+            required
+            aria-describedby="mass-urls-hint"
+            aria-errormessage="mass-urls-error"
+          ></textarea>
+          <div id="mass-urls-error" class="error-msg">
+            <span aria-hidden="true">⚠️</span> Please enter at least one GitHub repository URL.
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="mass-category">Default Category</label>
+            <span id="mass-cat-hint" class="hint">Assigned genre (or auto-detect).</span>
+            <select id="mass-category" name="category" aria-describedby="mass-cat-hint">
+              <option value="Auto">Auto-detect from game title</option>
+              <option value="Arcade">Arcade</option>
+              <option value="Action">Action</option>
+              <option value="Puzzle">Puzzle</option>
+              <option value="Platformer">Platformer</option>
+              <option value="Strategy">Strategy</option>
+              <option value="RPG">RPG</option>
+              <option value="Retro">Retro</option>
+            </select>
+          </div>
+
+          <div class="field checkbox-field-wrap">
+            <label class="checkbox-card" for="mass-auto-icon">
+              <input type="checkbox" id="mass-auto-icon" name="autoPickFirstIcon" checked>
+              <div>
+                <span class="checkbox-title">Auto-Pick 1st Google Icon</span>
+                <span class="checkbox-desc">Hands-free: searches Google Images for <code>"&lt;title&gt; icon"</code> and assigns result #1</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <details class="mass-advanced-details">
+          <summary>Advanced: GitHub Personal Access Token (Optional)</summary>
+          <div class="field" style="margin-top: 0.75rem;">
+            <label for="mass-github-token">Personal Access Token</label>
+            <span id="mass-token-hint" class="hint">Recommended for private repositories or to prevent GitHub unauthenticated rate limits (60/hr).</span>
+            <input
+              type="password"
+              id="mass-github-token"
+              name="githubToken"
+              placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+              autocomplete="off"
+              spellcheck="false"
+              aria-describedby="mass-token-hint"
+            >
+          </div>
+        </details>
+
+        <!-- Live Import Progress & Activity Log -->
+        <div id="mass-progress-section" class="mass-progress-section" hidden>
+          <div class="mass-progress-header">
+            <span id="mass-status-label" class="mass-status-label" aria-live="polite">Preparing mass import...</span>
+            <span id="mass-progress-percent" class="badge">0%</span>
+          </div>
+          <progress id="mass-import-progress" class="loading-bar" value="0" max="100" style="--brand-hue: 280;"></progress>
+          <div class="console-box-wrap">
+            <div class="console-header">
+              <span>Live Import Activity Log</span>
+              <button type="button" class="console-clear-btn" id="mass-console-clear">Clear</button>
+            </div>
+            <pre id="mass-import-console" class="mass-console" tabindex="0" aria-live="polite" aria-label="Live mass import activity log"></pre>
+          </div>
+        </div>
+
+        <div id="mass-form-status" class="form-status" role="alert" aria-live="assertive" hidden></div>
+      </div>
+
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          commandfor="mass-import-dialog"
+          command="close"
+          id="mass-cancel-btn"
+        >
+          Close
+        </button>
+        <button type="submit" class="btn btn-primary" id="start-mass-import-btn">
+          ⚡ Start Mass Import
         </button>
       </div>
     </form>
