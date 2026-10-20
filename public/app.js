@@ -221,8 +221,29 @@
   const openNewTabLink = document.getElementById('open-new-tab-link');
   const deleteGameBtn = document.getElementById('delete-game-btn');
 
+  // DOM Elements - Mass GitHub Importer
+  const massImportDialog = document.getElementById('mass-import-dialog');
+  const massImportForm = document.getElementById('mass-import-form');
+  const massGithubUrls = document.getElementById('mass-github-urls');
+  const massCategory = document.getElementById('mass-category');
+  const massAutoIcon = document.getElementById('mass-auto-icon');
+  const massGithubToken = document.getElementById('mass-github-token');
+  const massInsertExamplesBtn = document.getElementById('mass-insert-examples-btn');
+  const massProgressSection = document.getElementById('mass-progress-section');
+  const massStatusLabel = document.getElementById('mass-status-label');
+  const massProgressPercent = document.getElementById('mass-progress-percent');
+  const massImportProgress = document.getElementById('mass-import-progress');
+  const massImportConsole = document.getElementById('mass-import-console');
+  const massConsoleClear = document.getElementById('mass-console-clear');
+  const massFormStatus = document.getElementById('mass-form-status');
+  const startMassImportBtn = document.getElementById('start-mass-import-btn');
+  const massCancelBtn = document.getElementById('mass-cancel-btn');
+  const emptyAdminActions = document.getElementById('empty-admin-actions');
+  const emptyMassImportBtn = document.getElementById('empty-mass-import-btn');
+
   UserInvalidFallback.init(uploadForm);
   UserInvalidFallback.init(adminLoginForm);
+  if (massImportForm) UserInvalidFallback.init(massImportForm);
 
   let allGames = [];
   let activeCategory = 'All';
@@ -236,12 +257,13 @@
     isAdmin = Boolean(authenticated);
     adminHeaderNav.hidden = !isAdmin;
     adminPanel.hidden = !isAdmin;
-    emptyUploadBtn.hidden = !isAdmin;
+    if (emptyAdminActions) emptyAdminActions.hidden = !isAdmin || allGames.length > 0;
+    if (emptyUploadBtn) emptyUploadBtn.hidden = !isAdmin;
     deleteGameBtn.hidden = !isAdmin;
     footerAdminBtn.hidden = isAdmin;
 
     emptyStateDesc.textContent = isAdmin
-      ? 'Use the Upload New Game button to publish your first .html or .zip web game.'
+      ? 'Use the Upload Single Game button to publish files, or Mass GitHub Import to batch import repositories full of games.'
       : 'Check back soon for new playable browser games.';
 
     renderGames();
@@ -737,6 +759,276 @@
     renderGames();
     uploadDialog.close();
     openGamePlayer(updatedGame);
+  });
+
+  // ==========================================
+  // Mass GitHub Importer Logic
+  // ==========================================
+
+  // Open dialog event listeners
+  ['header-mass-import-btn', 'banner-mass-import-btn', 'empty-mass-import-btn'].forEach((btnId) => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      btn.addEventListener('click', () => {
+        if (massImportDialog && typeof massImportDialog.showModal === 'function' && !massImportDialog.open) {
+          massImportDialog.showModal();
+        }
+      });
+    }
+  });
+
+  // Append formatted, timestamped log to live console
+  function appendMassConsole(message, level = 'info') {
+    if (!massImportConsole) return;
+    const time = new Date().toLocaleTimeString();
+    const span = document.createElement('span');
+    span.className = `log-${level}`;
+    span.textContent = `[${time}] ${message}\n`;
+    massImportConsole.appendChild(span);
+    massImportConsole.scrollTop = massImportConsole.scrollHeight;
+  }
+
+  // Insert verified working HTML5 game repository examples
+  massInsertExamplesBtn?.addEventListener('click', () => {
+    if (!massGithubUrls) return;
+    massGithubUrls.value = [
+      'https://github.com/gabrielecirulli/2048',
+      'https://github.com/alecs/hexgl'
+    ].join('\n');
+    if (massCategory) massCategory.value = 'Auto';
+    if (massAutoIcon) massAutoIcon.checked = true;
+    massGithubUrls.focus();
+    syncAria(massGithubUrls);
+  });
+
+  // Clear live console
+  massConsoleClear?.addEventListener('click', () => {
+    if (massImportConsole) massImportConsole.innerHTML = '';
+  });
+
+  // Reset mass dialog status on close
+  massImportDialog?.addEventListener('close', () => {
+    if (massFormStatus) massFormStatus.hidden = true;
+    if (startMassImportBtn) startMassImportBtn.disabled = false;
+  });
+
+  // Client-side fallback mass import (for Cloudflare Pages static hosting)
+  async function handleClientSideMassImport(lines, defaultCategory, autoPickFirstIcon) {
+    let importedCount = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      let clean = raw.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/\.git$/i, '').replace(/\/+$/, '');
+      const parts = clean.split('/').filter(Boolean);
+      if (parts.length < 2) continue;
+      const owner = parts[0];
+      const repo = parts[1];
+
+      appendMassConsole(`[${i + 1}/${lines.length}] Processing ${owner}/${repo}...`, 'info');
+
+      const title = repo
+        .replace(/[-_]+/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+
+      // HTML5 game embed wrapper for static hosting
+      const playUrl = `https://htmlpreview.github.io/?https://github.com/${owner}/${repo}/blob/master/index.html`;
+
+      let coverUrl = null;
+      if (autoPickFirstIcon) {
+        appendMassConsole(`Searching Google Images for "${title} icon" (auto-picking 1st result)...`, 'info');
+        const iconData = await clientIconSearch(title);
+        if (iconData?.results?.length > 0) {
+          coverUrl = iconData.results[0].thumbnailUrl || iconData.results[0].url;
+          appendMassConsole(`Applied 1st icon result for "${title}"`, 'success');
+        }
+      }
+
+      let category = defaultCategory;
+      if (category === 'Auto' || category === 'All') {
+        const lower = title.toLowerCase();
+        if (/puzzle|2048|tetris|match|block/i.test(lower)) category = 'Puzzle';
+        else if (/retro|arcade|pacman|space/i.test(lower)) category = 'Retro';
+        else if (/racing|hexgl|drive|speed/i.test(lower)) category = 'Action';
+        else category = 'Arcade';
+      }
+
+      const newGame = {
+        id: crypto.randomUUID(),
+        title,
+        category,
+        author: owner,
+        description: `Imported from GitHub: ${owner}/${repo}`,
+        sourceType: 'url',
+        playUrl,
+        coverUrl,
+        createdAt: new Date().toISOString()
+      };
+
+      allGames.unshift(newGame);
+      await idbSaveGame(newGame);
+      renderGames();
+      importedCount++;
+
+      appendMassConsole(`Added "${title}" (${category}) to local arcade!`, 'success');
+      const pct = Math.round(((i + 1) / lines.length) * 100);
+      massImportProgress.value = pct;
+      massProgressPercent.textContent = `${pct}%`;
+    }
+
+    massImportProgress.value = 100;
+    massProgressPercent.textContent = '100%';
+    massStatusLabel.textContent = `Completed! ${importedCount} game(s) imported.`;
+    appendMassConsole(`\n🏁 Static import complete! Added ${importedCount} game(s) to IndexedDB library.`, 'success');
+  }
+
+  // Handle Mass GitHub Import submission
+  massImportForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (massFormStatus) massFormStatus.hidden = true;
+
+    if (!isAdmin) {
+      massFormStatus.textContent = 'Admin sign-in is required to import games.';
+      massFormStatus.hidden = false;
+      return;
+    }
+
+    if (!massImportForm.checkValidity()) {
+      const firstInvalid = massImportForm.querySelector(':invalid');
+      if (firstInvalid) {
+        firstInvalid.focus();
+        syncAria(firstInvalid);
+      }
+      return;
+    }
+
+    const rawUrls = massGithubUrls.value;
+    const lines = rawUrls.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
+    if (lines.length === 0) {
+      massFormStatus.textContent = 'Please enter at least one GitHub repository URL.';
+      massFormStatus.hidden = false;
+      return;
+    }
+
+    const defaultCategory = massCategory.value;
+    const autoPickFirstIcon = massAutoIcon.checked;
+    const githubToken = (massGithubToken?.value || '').trim();
+
+    startMassImportBtn.disabled = true;
+    massProgressSection.hidden = false;
+    massImportProgress.value = 0;
+    massProgressPercent.textContent = '0%';
+    massStatusLabel.textContent = `Starting mass import for ${lines.length} repository entry/entries...`;
+    massImportConsole.innerHTML = '';
+    appendMassConsole(`Initiating mass import for ${lines.length} repository/repositories...`, 'info');
+    appendMassConsole(`Icon Mode: ${autoPickFirstIcon ? 'Automatically pick 1st Google Images result' : 'Manual'}`, 'info');
+
+    let totalImportedCount = 0;
+
+    try {
+      const response = await fetch('/api/admin/mass-import-github', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
+        body: JSON.stringify({
+          repoUrls: lines,
+          defaultCategory,
+          autoPickFirstIcon,
+          githubToken
+        })
+      });
+
+      if (response.status === 404) {
+        appendMassConsole('Static hosting environment detected. Running client-side repository import...', 'warn');
+        await handleClientSideMassImport(lines, defaultCategory, autoPickFirstIcon);
+        startMassImportBtn.disabled = false;
+        return;
+      }
+
+      if (!response.ok) {
+        let errMessage = 'Failed to start mass import.';
+        try {
+          const errData = await response.json();
+          if (errData.error) errMessage = errData.error;
+        } catch {}
+        throw new Error(errMessage);
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/event-stream') && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop();
+
+          for (const part of parts) {
+            const trimmed = part.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const jsonStr = trimmed.slice(5).trim();
+            if (!jsonStr) continue;
+
+            try {
+              const eventData = JSON.parse(jsonStr);
+
+              if (eventData.type === 'log') {
+                appendMassConsole(eventData.message, eventData.level || 'info');
+                massStatusLabel.textContent = eventData.message;
+              } else if (eventData.type === 'game_imported') {
+                totalImportedCount++;
+                const newGame = eventData.game;
+                allGames.unshift(newGame);
+                renderGames();
+
+                appendMassConsole(`🎉 Successfully added "${newGame.title}" (${newGame.category}) to ArcadeVault!`, 'success');
+                const progressPct = Math.min(95, Math.round((totalImportedCount / (lines.length || 1)) * 100));
+                massImportProgress.value = progressPct;
+                massProgressPercent.textContent = `${progressPct}%`;
+              } else if (eventData.type === 'complete') {
+                massImportProgress.value = 100;
+                massProgressPercent.textContent = '100%';
+                massStatusLabel.textContent = `Completed! ${eventData.totalImported} game(s) imported.`;
+                appendMassConsole(`\n🏁 Mass Import Complete! Total imported: ${eventData.totalImported}, Errors: ${eventData.totalErrors}`, 'success');
+                if (eventData.errors?.length > 0) {
+                  eventData.errors.forEach((err) => {
+                    appendMassConsole(`- ${err.url}: ${err.error}`, 'error');
+                  });
+                }
+              }
+            } catch (jsonErr) {
+              console.warn('SSE parsing error:', jsonErr);
+            }
+          }
+        }
+      } else {
+        const result = await response.json();
+        if (Array.isArray(result.importedGames)) {
+          for (const g of result.importedGames) {
+            allGames.unshift(g);
+          }
+          renderGames();
+          totalImportedCount = result.importedGames.length;
+        }
+        massImportProgress.value = 100;
+        massProgressPercent.textContent = '100%';
+        appendMassConsole(`Imported ${result.totalImported} games!`, 'success');
+      }
+
+      startMassImportBtn.disabled = false;
+      massFormStatus.textContent = `🎉 Success! Mass import finished with ${totalImportedCount} game(s) imported and 1st Google icons applied.`;
+      massFormStatus.hidden = false;
+    } catch (err) {
+      startMassImportBtn.disabled = false;
+      appendMassConsole(`Fatal error: ${err.message}`, 'error');
+      massFormStatus.textContent = err.message || 'Mass import failed.';
+      massFormStatus.hidden = false;
+    }
   });
 
   // Search and category filtering
