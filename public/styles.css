@@ -43,7 +43,6 @@ body {
   margin-inline: auto;
 }
 
-/* Canonical visually-hidden recipe */
 .visually-hidden {
   position: absolute;
   clip-path: inset(50%);
@@ -63,7 +62,6 @@ body {
   user-select: none;
 }
 
-/* Header */
 .site-header {
   position: sticky;
   top: 0;
@@ -100,7 +98,6 @@ body {
   color: var(--accent-hover);
 }
 
-/* Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -180,13 +177,11 @@ body {
   border-color: var(--text-secondary);
 }
 
-/* Focus rings */
 :is(button, a, input, select, textarea):focus-visible {
   outline: 3px solid var(--accent-hover);
   outline-offset: 2px;
 }
 
-/* Hero Section */
 .main-content {
   flex: 1;
   padding-block: 2rem 4rem;
@@ -239,7 +234,6 @@ code {
   font-size: 0.9em;
 }
 
-/* Search & Category Filters */
 .catalog-controls {
   display: block;
   margin-block-end: 2rem;
@@ -304,7 +298,6 @@ code {
   color: #ffffff;
 }
 
-/* Catalog Grid */
 .section-header {
   display: flex;
   align-items: center;
@@ -432,7 +425,6 @@ code {
   flex: 1;
 }
 
-/* Empty State */
 .empty-state {
   text-align: center;
   padding: 4rem 1.5rem;
@@ -464,7 +456,6 @@ code {
   color: var(--text-secondary);
 }
 
-/* Dialogs & Backdrop */
 dialog::backdrop {
   background-color: rgba(4, 6, 12, 0.76);
   backdrop-filter: blur(4px);
@@ -493,7 +484,6 @@ dialog::backdrop {
   overflow: hidden;
 }
 
-/* Multi-Page Step Tracker */
 .step-nav {
   padding: 0.75rem 1.5rem;
   background-color: var(--bg-elevated);
@@ -534,7 +524,6 @@ dialog::backdrop {
   color: #86efac;
 }
 
-/* Step 2: Select Icon Grid */
 .icon-search-banner {
   padding: 0.9rem 1rem;
   border-radius: var(--radius-sm);
@@ -639,7 +628,6 @@ dialog::backdrop {
   overflow-y: auto;
 }
 
-/* Form Controls & Gestalt Proximity */
 .field {
   margin-block-end: 1.35rem;
 }
@@ -690,7 +678,6 @@ textarea {
   resize: vertical;
 }
 
-/* Radio Card Group (1-5 options -> visible radios) */
 .source-fieldset {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -739,7 +726,6 @@ textarea {
   font-weight: 400;
 }
 
-/* File Dropzone */
 .file-dropzone {
   position: relative;
   border: 2px dashed var(--border-subtle);
@@ -779,7 +765,6 @@ textarea {
   font-size: 0.92rem;
 }
 
-/* Validation Feedback (:user-invalid & fallback) */
 .error-msg {
   display: none;
   color: #fca5a5;
@@ -805,7 +790,6 @@ input.user-valid-fallback {
   border-color: var(--success);
 }
 
-/* Upload Progress Bar with Custom Property --brand-hue */
 .progress-wrap {
   margin-block-end: 1rem;
 }
@@ -826,7 +810,6 @@ input.user-valid-fallback {
   color: #fecaca;
 }
 
-/* Game Player Modal */
 .player-modal {
   width: min(1120px, 100% - 1.5rem);
   height: min(86vh, 860px);
@@ -896,7 +879,6 @@ input.user-valid-fallback {
   font-size: 0.9rem;
 }
 
-/* Footer */
 .site-footer {
   border-block-start: 1px solid var(--border-subtle);
   padding-block: 1.5rem;
@@ -930,7 +912,6 @@ input.user-valid-fallback {
   border-color: var(--text-secondary);
 }
 
-/* Admin Panel & Status */
 .header-actions {
   display: flex;
   align-items: center;
@@ -979,6 +960,208 @@ input.user-valid-fallback {
 
 .login-modal {
   width: min(440px, 100% - 1.5rem);
+}
+
+/* Mass GitHub Import Modal & Components */
+.mass-import-modal {
+  width: min(720px, 100% - 1.5rem);
+}
+
+.modal-header-text {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.badge-purple {
+  background: rgba(168, 85, 247, 0.18);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+}
+
+.mass-intro-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.95rem 1.15rem;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.12));
+  border: 1px solid rgba(168, 85, 247, 0.28);
+  border-radius: var(--radius-md);
+  margin-bottom: 1.25rem;
+  color: var(--text-primary);
+}
+
+.mass-intro-banner svg {
+  flex-shrink: 0;
+  color: #c084fc;
+  margin-top: 0.15rem;
+}
+
+.text-link-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent-hover);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.text-link-btn:hover {
+  background: rgba(99, 102, 241, 0.15);
+  text-decoration: underline;
+}
+
+.checkbox-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-input);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.checkbox-card:hover {
+  border-color: rgba(168, 85, 247, 0.4);
+}
+
+.checkbox-card:has(input:checked) {
+  border-color: #a855f7;
+  background-color: rgba(168, 85, 247, 0.1);
+}
+
+.checkbox-card input[type="checkbox"] {
+  accent-color: #a855f7;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+.checkbox-title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.checkbox-desc {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.mass-advanced-details {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  background-color: rgba(15, 23, 42, 0.4);
+  margin-top: 0.5rem;
+}
+
+.mass-advanced-details summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.mass-advanced-details summary:hover {
+  color: var(--text-primary);
+}
+
+.mass-progress-section {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.mass-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.mass-status-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.console-box-wrap {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: var(--radius-sm);
+  background: #090d16;
+  overflow: hidden;
+  margin-top: 0.4rem;
+}
+
+.console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  background: #0d1322;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.console-clear-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+}
+
+.console-clear-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mass-console {
+  margin: 0;
+  padding: 0.75rem;
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #38bdf8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mass-console .log-info {
+  color: #94a3b8;
+}
+
+.mass-console .log-success {
+  color: #4ade80;
+}
+
+.mass-console .log-warn {
+  color: #facc15;
+}
+
+.mass-console .log-error {
+  color: #f87171;
 }
 
 .label-row {
