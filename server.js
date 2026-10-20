@@ -287,6 +287,280 @@ app.get('/api/admin/icon-search', requireAdmin, async (req, res) => {
   }
 });
 
+// Download and save an icon locally into /uploads/covers/<gameId>-icon.<ext>
+async function downloadAndSaveCover(gameId, candidateUrls) {
+  let savedCoverUrl = null;
+  for (const candidateUrl of candidateUrls.filter(Boolean)) {
+    try {
+      const cleanUrl = candidateUrl.replace(/&amp;/g, '&');
+      const imgRes = await fetch(cleanUrl, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        }
+      });
+      if (imgRes.ok) {
+        const contentType = (imgRes.headers.get('content-type') || '').toLowerCase();
+        let ext = '.jpg';
+        if (contentType.includes('png')) ext = '.png';
+        else if (contentType.includes('webp')) ext = '.webp';
+        else if (contentType.includes('gif')) ext = '.gif';
+
+        const buffer = Buffer.from(await imgRes.arrayBuffer());
+        if (buffer.length > 200) {
+          const filename = `${gameId}-icon${ext}`;
+          fs.writeFileSync(path.join(COVERS_DIR, filename), buffer);
+          savedCoverUrl = `/uploads/covers/${filename}`;
+          break;
+        }
+      }
+    } catch {
+      // Try next candidate URL
+    }
+  }
+  return savedCoverUrl;
+}
+
+// Parse GitHub URL or shorthand (e.g., "owner/repo", "https://github.com/owner/repo/tree/branch/subpath")
+function parseGitHubUrl(input) {
+  let str = String(input || '').trim();
+  if (!str) return null;
+  str = str.replace(/^\[.*?\]\((.*?)\)$/, '$1').trim();
+  str = str.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '');
+  str = str.replace(/\.git$/i, '');
+  str = str.replace(/\/+$/, '');
+  const parts = str.split('/').filter(Boolean);
+  if (parts.length < 2) return null;
+  const owner = parts[0];
+  const repo = parts[1];
+  let branch = null;
+  let subpath = null;
+  if (parts[2] === 'tree' && parts[3]) {
+    branch = parts[3];
+    if (parts.length > 4) {
+      subpath = parts.slice(4).join('/');
+    }
+  }
+  return { owner, repo, branch, subpath, fullName: `${owner}/${repo}` };
+}
+
+// Download GitHub repository as a ZIP archive buffer
+async function downloadGitHubRepoZip(owner, repo, branch, token) {
+  const branchesToTry = branch ? [branch] : ['main', 'master', 'gh-pages'];
+  const headers = {
+    'User-Agent': 'ArcadeVault-Game-Importer'
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  for (const b of branchesToTry) {
+    const codeloadUrl = `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/${b}`;
+    try {
+      const res = await fetch(codeloadUrl, { headers });
+      if (res.ok) {
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length > 100) {
+          return { buffer: buf, branch: b };
+        }
+      }
+    } catch {
+      // Try next
+    }
+  }
+
+  // Fallback to GitHub API zipball
+  try {
+    const apiZipUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/${branch || ''}`;
+    const res = await fetch(apiZipUrl, { headers, redirect: 'follow' });
+    if (res.ok) {
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 100) {
+        return { buffer: buf, branch: branch || 'default' };
+      }
+    }
+  } catch {
+    // Ignore
+  }
+
+  throw new Error(`Could not download repository ${owner}/${repo}. Check the repository name or branch permissions.`);
+}
+
+// Detect individual games within a downloaded repository ZIP
+function scanZipForGames(zip, subpath = '') {
+  const entries = zip.getEntries();
+  const normalizedSubpath = subpath ? subpath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
+
+  const allEntryNames = entries.map((e) => e.entryName.replace(/\\/g, '/'));
+  let rootPrefix = '';
+  const firstSlash = allEntryNames[0]?.indexOf('/');
+  if (firstSlash > 0) {
+    const candidate = allEntryNames[0].slice(0, firstSlash + 1);
+    if (allEntryNames.every((p) => p.startsWith(candidate) || p === candidate.slice(0, -1))) {
+      rootPrefix = candidate;
+    }
+  }
+
+  const htmlEntries = entries.filter((e) => {
+    if (e.isDirectory) return false;
+    const name = e.entryName.replace(/\\/g, '/');
+    const rel = name.slice(rootPrefix.length);
+    if (normalizedSubpath && !rel.startsWith(normalizedSubpath)) return false;
+    if (rel.includes('/node_modules/') || rel.startsWith('node_modules/')) return false;
+    if (rel.includes('/.git/') || rel.startsWith('.git/')) return false;
+    const base = path.basename(name).toLowerCase();
+    return base === 'index.html' || base === 'index.htm' || base === 'game.html' || base === 'play.html';
+  });
+
+  if (htmlEntries.length === 0) {
+    const anyHtml = entries.filter((e) => {
+      if (e.isDirectory) return false;
+      const name = e.entryName.replace(/\\/g, '/');
+      const rel = name.slice(rootPrefix.length);
+      if (normalizedSubpath && !rel.startsWith(normalizedSubpath)) return false;
+      if (rel.includes('/node_modules/') || rel.includes('/.git/') || rel.includes('/docs/')) return false;
+      return /\.html?$/i.test(name);
+    });
+    if (anyHtml.length > 0) {
+      htmlEntries.push(anyHtml[0]);
+    }
+  }
+
+  if (htmlEntries.length === 0) return [];
+
+  const gamesMap = new Map();
+  for (const entry of htmlEntries) {
+    const fullName = entry.entryName.replace(/\\/g, '/');
+    const relName = fullName.slice(rootPrefix.length);
+    const entryDir = path.dirname(relName);
+    const normalizedDir = entryDir === '.' ? '' : entryDir;
+
+    let gameDirKey = normalizedDir;
+    const stripped = normalizedDir.replace(/\/(dist|build|public|web|bin|export|client)$/i, '');
+    if (stripped !== normalizedDir) {
+      gameDirKey = stripped;
+    }
+
+    if (!gamesMap.has(gameDirKey)) {
+      gamesMap.set(gameDirKey, {
+        gameDir: gameDirKey,
+        entryRelPath: relName,
+        entryEntryName: entry.entryName
+      });
+    }
+  }
+
+  const dirs = Array.from(gamesMap.keys());
+  let targetDirs = dirs;
+  if (dirs.length > 1 && dirs.includes('')) {
+    targetDirs = dirs.filter((d) => d !== '');
+  }
+
+  return targetDirs.map((dirKey) => {
+    const item = gamesMap.get(dirKey);
+    const fullPrefix = rootPrefix
+      ? `${rootPrefix}${item.gameDir ? item.gameDir + '/' : ''}`
+      : item.gameDir
+      ? `${item.gameDir}/`
+      : '';
+    return {
+      gameDir: item.gameDir,
+      entryRelPath: item.entryRelPath,
+      fullPrefix
+    };
+  });
+}
+
+// Extract files belonging to a specific game with Zip-Slip path traversal defense
+function extractGameAssets(zip, gameItem, targetDir) {
+  fs.mkdirSync(targetDir, { recursive: true });
+  const prefix = gameItem.fullPrefix;
+  const entries = zip.getEntries();
+
+  for (const entry of entries) {
+    const name = entry.entryName.replace(/\\/g, '/');
+    if (prefix && !name.startsWith(prefix)) {
+      continue;
+    }
+
+    const innerRel = prefix ? name.slice(prefix.length) : name;
+    if (!innerRel || innerRel === '/') continue;
+
+    const normalized = path.normalize(innerRel);
+    if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
+      continue;
+    }
+
+    const dest = path.join(targetDir, normalized);
+    if (!dest.startsWith(targetDir)) {
+      continue;
+    }
+
+    if (entry.isDirectory) {
+      fs.mkdirSync(dest, { recursive: true });
+    } else {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, entry.getData());
+    }
+  }
+
+  return findEntryHtml(targetDir) || 'index.html';
+}
+
+// Extract game metadata (title, category, author, description)
+function extractGameMetadata(targetDir, entryHtmlRel, gameItem, repoInfo, defaultCategory) {
+  let title = '';
+  let description = '';
+
+  const indexHtmlPath = path.join(targetDir, entryHtmlRel);
+  if (fs.existsSync(indexHtmlPath)) {
+    try {
+      const htmlContent = fs.readFileSync(indexHtmlPath, 'utf8');
+      const titleMatch = htmlContent.match(/<title[^>]*>([^<]+)<\/title>/i);
+      if (titleMatch && titleMatch[1]) {
+        let t = titleMatch[1].trim();
+        t = t.replace(/\s*[-|•–—]\s*(GitHub|HTML5(?:\s*Canvas)?(?:\s*Game)?|Free Online Game|Play Online|Canvas Game|JavaScript Game|Browser Game).*$/i, '').trim();
+        if (t && !/^(document|webpack app|vite app|react app|index|untitled|html5 game)$/i.test(t)) {
+          title = t;
+        }
+      }
+      const descMatch = htmlContent.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
+      if (descMatch && descMatch[1]) {
+        description = descMatch[1].trim();
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  if (!title) {
+    const rawName = gameItem.gameDir ? path.basename(gameItem.gameDir) : repoInfo.repo;
+    title = rawName
+      .replace(/[-_]+/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim();
+  }
+
+  let category = defaultCategory || 'Arcade';
+  const lower = title.toLowerCase();
+  if (category === 'All' || category === 'Auto') {
+    if (/puzzle|tetris|match|block|sudoku|2048|chess|trivia/i.test(lower)) category = 'Puzzle';
+    else if (/action|shooter|bullet|fight|combat|ninja/i.test(lower)) category = 'Action';
+    else if (/mario|sonic|retro|pacman|arcade|space invaders|galaga|asteroids|pong|snake/i.test(lower)) category = 'Retro';
+    else if (/platform|jump|runner|run|climb/i.test(lower)) category = 'Platformer';
+    else if (/strategy|defense|tower|card|tactics/i.test(lower)) category = 'Strategy';
+    else if (/rpg|quest|adventure|dungeon/i.test(lower)) category = 'RPG';
+    else category = 'Arcade';
+  }
+
+  const author = repoInfo.owner || 'Indie Creator';
+  if (!description) {
+    description = `Imported from GitHub: ${repoInfo.fullName}`;
+  }
+
+  return { title, category, author, description };
+}
+
 // PUT /api/games/:id/icon - Save selected icon from Step 2 (Admin Only)
 app.put('/api/games/:id/icon', requireAdmin, async (req, res) => {
   const { id } = req.params;
@@ -302,41 +576,203 @@ app.put('/api/games/:id/icon', requireAdmin, async (req, res) => {
     return res.status(404).json({ error: 'Game not found.' });
   }
 
-  let savedCoverUrl = thumbnailUrl || iconUrl;
-
-  // Try downloading the selected icon locally into /uploads/covers/<id>.jpg
-  for (const candidateUrl of [thumbnailUrl, iconUrl].filter(Boolean)) {
-    try {
-      const imgRes = await fetch(candidateUrl, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-        }
-      });
-      if (imgRes.ok) {
-        const contentType = (imgRes.headers.get('content-type') || '').toLowerCase();
-        let ext = '.jpg';
-        if (contentType.includes('png')) ext = '.png';
-        else if (contentType.includes('webp')) ext = '.webp';
-        else if (contentType.includes('gif')) ext = '.gif';
-
-        const buffer = Buffer.from(await imgRes.arrayBuffer());
-        if (buffer.length > 200) {
-          const filename = `${id}-icon${ext}`;
-          fs.writeFileSync(path.join(COVERS_DIR, filename), buffer);
-          savedCoverUrl = `/uploads/covers/${filename}`;
-          break;
-        }
-      }
-    } catch {
-      // Try next candidate URL
-    }
+  let savedCoverUrl = await downloadAndSaveCover(id, [thumbnailUrl, iconUrl]);
+  if (!savedCoverUrl) {
+    savedCoverUrl = thumbnailUrl || iconUrl;
   }
 
   game.coverUrl = savedCoverUrl;
   writeGames(games);
 
   return res.json(game);
+});
+
+// POST /api/admin/mass-import-github - Mass import GitHub game repositories with automated 1st icon selection (Admin Only)
+app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
+  const {
+    repoUrls = [],
+    defaultCategory = 'Arcade',
+    autoPickFirstIcon = true,
+    githubToken = ''
+  } = req.body || {};
+
+  const rawLines = Array.isArray(repoUrls) ? repoUrls : String(repoUrls || '').split(/[\r\n,]+/);
+  const cleanUrls = rawLines.map((s) => s.trim()).filter(Boolean);
+
+  if (cleanUrls.length === 0) {
+    return res.status(400).json({ error: 'Please enter at least one GitHub repository URL.' });
+  }
+
+  const isStream = req.headers.accept?.includes('text/event-stream') || req.query.stream === '1';
+  if (isStream) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+  }
+
+  const sendEvent = (type, data) => {
+    if (isStream) {
+      res.write(`data: ${JSON.stringify({ type, timestamp: new Date().toISOString(), ...data })}\n\n`);
+    }
+  };
+
+  sendEvent('start', { totalRepos: cleanUrls.length });
+
+  const importedGames = [];
+  const errors = [];
+  const existingGames = readGames();
+
+  for (let rIdx = 0; rIdx < cleanUrls.length; rIdx++) {
+    const rawUrl = cleanUrls[rIdx];
+    const parsed = parseGitHubUrl(rawUrl);
+
+    if (!parsed) {
+      errors.push({ url: rawUrl, error: 'Invalid GitHub URL or repository format.' });
+      sendEvent('log', { level: 'error', message: `Invalid repository URL format: "${rawUrl}"` });
+      continue;
+    }
+
+    sendEvent('log', {
+      level: 'info',
+      message: `[${rIdx + 1}/${cleanUrls.length}] Downloading ${parsed.fullName}...`
+    });
+
+    let zipResult;
+    try {
+      zipResult = await downloadGitHubRepoZip(parsed.owner, parsed.repo, parsed.branch, githubToken);
+      sendEvent('log', {
+        level: 'success',
+        message: `Downloaded ${parsed.fullName} (branch: ${zipResult.branch}, size: ${(zipResult.buffer.length / 1024).toFixed(1)} KB)`
+      });
+    } catch (err) {
+      errors.push({ url: rawUrl, error: err.message });
+      sendEvent('log', { level: 'error', message: `Failed to download ${parsed.fullName}: ${err.message}` });
+      continue;
+    }
+
+    let detectedGames = [];
+    try {
+      const zip = new AdmZip(zipResult.buffer);
+      detectedGames = scanZipForGames(zip, parsed.subpath);
+
+      if (detectedGames.length === 0) {
+        errors.push({ url: rawUrl, error: 'No playable HTML5 game entry file found in repository.' });
+        sendEvent('log', {
+          level: 'warn',
+          message: `No playable game files found in ${parsed.fullName}. Make sure it contains an index.html.`
+        });
+        continue;
+      }
+
+      sendEvent('log', {
+        level: 'info',
+        message: `Discovered ${detectedGames.length} game(s) in ${parsed.fullName}`
+      });
+
+      for (let gIdx = 0; gIdx < detectedGames.length; gIdx++) {
+        const gameItem = detectedGames[gIdx];
+        const gameId = crypto.randomUUID();
+        const targetGameDir = path.join(GAMES_DIR, gameId);
+
+        sendEvent('log', {
+          level: 'info',
+          message: `Extracting game ${gIdx + 1}/${detectedGames.length} from ${parsed.fullName}...`
+        });
+
+        const entryHtmlRel = extractGameAssets(zip, gameItem, targetGameDir);
+        const meta = extractGameMetadata(targetGameDir, entryHtmlRel, gameItem, parsed, defaultCategory);
+
+        sendEvent('log', {
+          level: 'info',
+          message: `Extracted game: "${meta.title}" (${meta.category}) by ${meta.author}`
+        });
+
+        let coverUrl = null;
+        if (autoPickFirstIcon) {
+          sendEvent('log', {
+            level: 'info',
+            message: `Searching Google Images for "${meta.title} icon" (auto-picking 1st result)...`
+          });
+          try {
+            const iconData = await searchGameIcons(meta.title);
+            if (iconData && Array.isArray(iconData.results) && iconData.results.length > 0) {
+              const firstIcon = iconData.results[0]; // Exactly the first one!
+              coverUrl = await downloadAndSaveCover(gameId, [firstIcon.thumbnailUrl, firstIcon.url]);
+              if (coverUrl) {
+                sendEvent('log', {
+                  level: 'success',
+                  message: `Applied 1st icon result for "${meta.title}"`
+                });
+              }
+            }
+          } catch (err) {
+            console.warn('Auto icon error:', err.message);
+          }
+
+          if (!coverUrl) {
+            const iconCandidates = ['icon.png', 'favicon.ico', 'cover.png', 'logo.png', 'thumbnail.png'];
+            for (const cand of iconCandidates) {
+              const candPath = path.join(targetGameDir, cand);
+              if (fs.existsSync(candPath)) {
+                const ext = path.extname(cand);
+                const savedName = `${gameId}-icon${ext}`;
+                fs.copyFileSync(candPath, path.join(COVERS_DIR, savedName));
+                coverUrl = `/uploads/covers/${savedName}`;
+                sendEvent('log', { level: 'info', message: `Using repo asset icon for "${meta.title}"` });
+                break;
+              }
+            }
+          }
+        }
+
+        const newGame = {
+          id: gameId,
+          title: meta.title,
+          category: meta.category,
+          author: meta.author,
+          description: meta.description,
+          sourceType: 'file',
+          playUrl: `/uploads/games/${gameId}/${entryHtmlRel}`,
+          coverUrl,
+          createdAt: new Date().toISOString()
+        };
+
+        existingGames.unshift(newGame);
+        writeGames(existingGames);
+        importedGames.push(newGame);
+
+        sendEvent('game_imported', {
+          game: newGame,
+          progress: {
+            current: importedGames.length,
+            repo: parsed.fullName
+          }
+        });
+      }
+    } catch (err) {
+      errors.push({ url: rawUrl, error: err.message });
+      sendEvent('log', { level: 'error', message: `Error processing ${parsed.fullName}: ${err.message}` });
+    }
+  }
+
+  sendEvent('complete', {
+    totalImported: importedGames.length,
+    totalErrors: errors.length,
+    importedGames,
+    errors
+  });
+
+  if (!isStream) {
+    return res.json({
+      success: true,
+      totalImported: importedGames.length,
+      totalErrors: errors.length,
+      importedGames,
+      errors
+    });
+  } else {
+    res.end();
+  }
 });
 
 const upload = multer({
