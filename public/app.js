@@ -667,7 +667,7 @@
         updateSourceMode();
 
         enterSelectIconStep(createdGame);
-      } else if (xhr.status === 404) {
+      } else if (xhr.status === 404 || xhr.status === 405 || xhr.status === 501 || xhr.status === 0) {
         // Fallback for static hosting on Cloudflare Pages
         progressBar.value = 100;
         progressBar.style.setProperty('--brand-hue', '140');
@@ -860,8 +860,8 @@
         continue;
       }
 
-      // HTML5 game embed wrapper for static hosting
-      const playUrl = `https://htmlpreview.github.io/?https://github.com/${owner}/${repo}/blob/master/index.html`;
+      // HTML5 game embed wrapper for static hosting (HEAD automatically targets default branch: main or master)
+      const playUrl = `https://htmlpreview.github.io/?https://github.com/${owner}/${repo}/blob/HEAD/index.html`;
 
       let coverUrl = null;
       if (autoPickFirstIcon) {
@@ -911,6 +911,11 @@
     const skipNotice = skippedCount ? `, ${skippedCount} skipped` : '';
     massStatusLabel.textContent = `Completed! ${importedCount} game(s) imported${skipNotice}.`;
     appendMassConsole(`\n🏁 Static import complete! Added ${importedCount} game(s) to IndexedDB library (${skippedCount} skipped as already existing).`, 'success');
+
+    startMassImportBtn.disabled = false;
+    const skipSummary = skippedCount > 0 ? ` (${skippedCount} skipped as already in library)` : '';
+    massFormStatus.textContent = `🎉 Success! Mass import finished with ${importedCount} game(s) imported${skipSummary} and 1st Google icons applied.`;
+    massFormStatus.hidden = false;
   }
 
   // Handle Mass GitHub Import submission
@@ -958,32 +963,52 @@
     let totalSkippedCount = 0;
 
     try {
-      const response = await fetch('/api/admin/mass-import-github', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
-        },
-        body: JSON.stringify({
-          repoUrls: lines,
-          defaultCategory,
-          autoPickFirstIcon,
-          githubToken
-        })
-      });
+      let response = null;
+      let isStaticHosting = false;
 
-      if (response.status === 404) {
-        appendMassConsole('Static hosting environment detected. Running client-side repository import...', 'warn');
+      try {
+        response = await fetch('/api/admin/mass-import-github', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+          },
+          body: JSON.stringify({
+            repoUrls: lines,
+            defaultCategory,
+            autoPickFirstIcon,
+            githubToken
+          })
+        });
+      } catch (netErr) {
+        // Network error (CORS blocked, offline, or static deployment)
+        isStaticHosting = true;
+      }
+
+      // Check if host indicated static hosting or method not allowed (Cloudflare Pages returns 405 for POST to static URLs)
+      if (isStaticHosting || !response || response.status === 404 || response.status === 405 || response.status === 501 || response.status === 502) {
+        const reason = isStaticHosting ? 'Client-Side Mode' : `HTTP ${response.status}`;
+        appendMassConsole(`Static hosting environment detected (${reason}). Running client-side repository import...`, 'warn');
         await handleClientSideMassImport(lines, defaultCategory, autoPickFirstIcon);
-        startMassImportBtn.disabled = false;
         return;
       }
 
+      if (response.status === 401) {
+        setAdminState(false);
+        adminLoginDialog.showModal();
+        throw new Error('Admin session expired or unauthorized. Please sign in again.');
+      }
+
       if (!response.ok) {
-        let errMessage = 'Failed to start mass import.';
+        let errMessage = `HTTP ${response.status}: Failed to start mass import.`;
         try {
-          const errData = await response.json();
-          if (errData.error) errMessage = errData.error;
+          const text = await response.text();
+          try {
+            const errData = JSON.parse(text);
+            if (errData.error) errMessage = errData.error;
+          } catch {
+            if (text && text.length < 200) errMessage = text.trim();
+          }
         } catch {}
         throw new Error(errMessage);
       }
