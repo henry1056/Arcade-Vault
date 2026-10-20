@@ -241,9 +241,30 @@
   const emptyAdminActions = document.getElementById('empty-admin-actions');
   const emptyMassImportBtn = document.getElementById('empty-mass-import-btn');
 
+  // DOM Elements - Edit Game Details Dialog
+  const editGameDialog = document.getElementById('edit-game-dialog');
+  const editGameForm = document.getElementById('edit-game-form');
+  const editGameId = document.getElementById('edit-game-id');
+  const editGameTitle = document.getElementById('edit-game-title');
+  const editGameCategory = document.getElementById('edit-game-category');
+  const editGameAuthor = document.getElementById('edit-game-author');
+  const editGameDescription = document.getElementById('edit-game-description');
+  const editGameCoverUrl = document.getElementById('edit-game-cover-url');
+  const editCoverImg = document.getElementById('edit-cover-img');
+  const editCoverFallback = document.getElementById('edit-cover-fallback');
+  const editSearchIconBtn = document.getElementById('edit-search-icon-btn');
+  const editIconSearchSection = document.getElementById('edit-icon-search-section');
+  const editIconSearchStatus = document.getElementById('edit-icon-search-status');
+  const editIconCancelSearchBtn = document.getElementById('edit-icon-cancel-search-btn');
+  const editIconResultsGrid = document.getElementById('edit-icon-results-grid');
+  const editFormStatus = document.getElementById('edit-form-status');
+  const saveEditGameBtn = document.getElementById('save-edit-game-btn');
+  const editGamePlayerBtn = document.getElementById('edit-game-player-btn');
+
   UserInvalidFallback.init(uploadForm);
   UserInvalidFallback.init(adminLoginForm);
   if (massImportForm) UserInvalidFallback.init(massImportForm);
+  if (editGameForm) UserInvalidFallback.init(editGameForm);
 
   let allGames = [];
   let activeCategory = 'All';
@@ -259,6 +280,7 @@
     adminPanel.hidden = !isAdmin;
     if (emptyAdminActions) emptyAdminActions.hidden = !isAdmin || allGames.length > 0;
     if (emptyUploadBtn) emptyUploadBtn.hidden = !isAdmin;
+    if (editGamePlayerBtn) editGamePlayerBtn.hidden = !isAdmin;
     deleteGameBtn.hidden = !isAdmin;
     footerAdminBtn.hidden = isAdmin;
 
@@ -1645,11 +1667,25 @@
       actions.appendChild(playBtn);
 
       if (isAdmin) {
+        const cardEditBtn = document.createElement('button');
+        cardEditBtn.type = 'button';
+        cardEditBtn.className = 'btn btn-secondary btn-sm';
+        cardEditBtn.textContent = '✏️ Edit';
+        cardEditBtn.title = 'Edit game details';
+        cardEditBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openEditGameModal(game);
+        });
+        actions.appendChild(cardEditBtn);
+
         const cardDelBtn = document.createElement('button');
         cardDelBtn.type = 'button';
         cardDelBtn.className = 'btn btn-danger btn-sm';
         cardDelBtn.textContent = 'Delete';
-        cardDelBtn.addEventListener('click', () => deleteGameById(game));
+        cardDelBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteGameById(game);
+        });
         actions.appendChild(cardDelBtn);
       }
 
@@ -1667,6 +1703,7 @@
     playerAuthor.textContent = `By ${game.author || 'Indie Creator'}`;
     playerDesc.textContent = game.description || '';
     openNewTabLink.href = game.playUrl;
+    if (editGamePlayerBtn) editGamePlayerBtn.hidden = !isAdmin;
     deleteGameBtn.hidden = !isAdmin;
     gameIframe.src = game.playUrl;
     playerDialog.showModal();
@@ -1694,6 +1731,272 @@
       deleteGameById(currentPlayingGame);
     }
   });
+
+  // ==========================================
+  // Edit Game Modal Handlers
+  // ==========================================
+  function updateEditCoverPreview(url) {
+    if (!editCoverImg || !editCoverFallback) return;
+    if (url && typeof url === 'string' && url.trim()) {
+      editCoverImg.src = url.trim();
+      editCoverImg.hidden = false;
+      editCoverFallback.hidden = true;
+    } else {
+      editCoverImg.src = '';
+      editCoverImg.hidden = true;
+      editCoverFallback.hidden = false;
+    }
+  }
+
+  if (editCoverImg) {
+    editCoverImg.addEventListener('error', () => {
+      editCoverImg.hidden = true;
+      if (editCoverFallback) editCoverFallback.hidden = false;
+    });
+
+    editCoverImg.addEventListener('load', () => {
+      editCoverImg.hidden = false;
+      if (editCoverFallback) editCoverFallback.hidden = true;
+    });
+  }
+
+  if (editGameCoverUrl) {
+    editGameCoverUrl.addEventListener('input', () => {
+      updateEditCoverPreview(editGameCoverUrl.value);
+    });
+  }
+
+  function openEditGameModal(game) {
+    if (!editGameDialog) return;
+    editGameId.value = game.id;
+    editGameTitle.value = game.title || '';
+    editGameCategory.value = game.category || 'Arcade';
+    editGameAuthor.value = game.author || '';
+    editGameDescription.value = game.description || '';
+    editGameCoverUrl.value = game.coverUrl || '';
+    updateEditCoverPreview(game.coverUrl);
+
+    if (editFormStatus) {
+      editFormStatus.hidden = true;
+      editFormStatus.textContent = '';
+      editFormStatus.className = 'form-status';
+    }
+    if (editIconSearchSection) {
+      editIconSearchSection.hidden = true;
+    }
+    if (editIconResultsGrid) {
+      editIconResultsGrid.innerHTML = '';
+    }
+    if (saveEditGameBtn) {
+      saveEditGameBtn.disabled = false;
+      saveEditGameBtn.textContent = '💾 Save Changes';
+    }
+
+    editGameDialog.showModal();
+  }
+
+  // Google Icon Search inside Edit Modal
+  if (editSearchIconBtn) {
+    editSearchIconBtn.addEventListener('click', async () => {
+      const title = editGameTitle.value.trim();
+      if (!title) {
+        if (editFormStatus) {
+          editFormStatus.className = 'form-status error';
+          editFormStatus.textContent = 'Please enter a game title before searching for icons.';
+          editFormStatus.hidden = false;
+        }
+        editGameTitle.focus();
+        return;
+      }
+
+      if (editFormStatus) editFormStatus.hidden = true;
+      editIconSearchSection.hidden = false;
+      editIconSearchStatus.textContent = 'Searching Google Images for "' + title + ' icon"...';
+      editIconResultsGrid.innerHTML = '<div class="hint" style="grid-column: 1 / -1; text-align: center; padding: 1rem 0;">Searching...</div>';
+      editSearchIconBtn.disabled = true;
+
+      try {
+        let data = null;
+        try {
+          const res = await fetch('/api/admin/icon-search?q=' + encodeURIComponent(title));
+          if (res.ok) data = await res.json();
+        } catch {
+          // Fallback below
+        }
+
+        if (!data || !Array.isArray(data.results) || data.results.length === 0) {
+          data = await clientIconSearch(title);
+        }
+
+        const results = (data && Array.isArray(data.results)) ? data.results.slice(0, 5) : [];
+
+        if (results.length === 0) {
+          editIconSearchStatus.textContent = 'No icon results found.';
+          editIconResultsGrid.innerHTML = '<p class="hint" style="grid-column: 1 / -1; text-align: center; margin: 0.5rem 0;">No icons found. You can paste any image URL directly above.</p>';
+          return;
+        }
+
+        editIconSearchStatus.textContent = 'Top ' + results.length + ' icon results for "' + (data.query || title + ' icon') + '":';
+        editIconResultsGrid.innerHTML = '';
+
+        results.forEach((item, index) => {
+          const card = document.createElement('div');
+          card.className = 'edit-icon-choice-card';
+          card.tabIndex = 0;
+          card.setAttribute('role', 'button');
+          card.setAttribute('aria-label', 'Select icon option ' + (index + 1));
+
+          const img = document.createElement('img');
+          img.src = item.thumbnailUrl || item.url;
+          img.alt = 'Option ' + (index + 1);
+          img.loading = 'lazy';
+
+          const label = document.createElement('span');
+          label.textContent = 'Option ' + (index + 1);
+
+          card.append(img, label);
+
+          const selectIcon = () => {
+            editIconResultsGrid.querySelectorAll('.edit-icon-choice-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            editGameCoverUrl.value = item.url;
+            updateEditCoverPreview(item.url);
+            editIconSearchStatus.textContent = '✅ Selected Option ' + (index + 1);
+          };
+
+          card.addEventListener('click', selectIcon);
+          card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              selectIcon();
+            }
+          });
+
+          editIconResultsGrid.appendChild(card);
+        });
+      } catch (err) {
+        editIconSearchStatus.textContent = 'Failed to search icons.';
+        editIconResultsGrid.innerHTML = '<p class="hint error" style="grid-column: 1 / -1; margin: 0.5rem 0;">' + escapeHtml(err.message) + '</p>';
+      } finally {
+        editSearchIconBtn.disabled = false;
+      }
+    });
+  }
+
+  if (editIconCancelSearchBtn) {
+    editIconCancelSearchBtn.addEventListener('click', () => {
+      editIconSearchSection.hidden = true;
+    });
+  }
+
+  // Handle Edit Game Form Submit
+  if (editGameForm) {
+    editGameForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = editGameId.value;
+      const title = editGameTitle.value.trim();
+      const category = editGameCategory.value;
+      const author = editGameAuthor.value.trim();
+      const description = editGameDescription.value.trim();
+      const coverUrl = editGameCoverUrl.value.trim();
+
+      if (!title) {
+        editFormStatus.className = 'form-status error';
+        editFormStatus.textContent = 'Please enter a game title.';
+        editFormStatus.hidden = false;
+        editGameTitle.focus();
+        return;
+      }
+
+      saveEditGameBtn.disabled = true;
+      saveEditGameBtn.textContent = 'Saving...';
+      editFormStatus.className = 'form-status';
+      editFormStatus.textContent = 'Saving game changes...';
+      editFormStatus.hidden = false;
+
+      let updatedGame = null;
+
+      try {
+        const res = await fetch('/api/games/' + encodeURIComponent(id), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title,
+            category,
+            author,
+            description,
+            coverUrl
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.game) {
+            updatedGame = data.game;
+          }
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || ('Server responded with status ' + res.status));
+        }
+      } catch (err) {
+        // Fallback for static hosting (Cloudflare Pages) or offline
+        console.warn('API update failed, applying update in local storage:', err);
+        const existing = allGames.find(g => g.id === id);
+        if (existing) {
+          updatedGame = {
+            ...existing,
+            title,
+            category,
+            author,
+            description,
+            coverUrl,
+            updatedAt: new Date().toISOString()
+          };
+          await idbSaveGame(updatedGame);
+        }
+      }
+
+      if (updatedGame) {
+        // Update in-memory allGames
+        const idx = allGames.findIndex(g => g.id === id);
+        if (idx !== -1) {
+          allGames[idx] = updatedGame;
+        } else {
+          allGames.unshift(updatedGame);
+        }
+
+        // If currently open in player modal, update player metadata
+        if (currentPlayingGame && currentPlayingGame.id === id) {
+          currentPlayingGame = updatedGame;
+          playerTitle.textContent = updatedGame.title;
+          playerCategory.textContent = updatedGame.category || 'Arcade';
+          playerAuthor.textContent = 'By ' + (updatedGame.author || 'Indie Creator');
+          playerDesc.textContent = updatedGame.description || '';
+        }
+
+        renderGames();
+
+        editFormStatus.className = 'form-status success';
+        editFormStatus.textContent = 'Game updated successfully!';
+        setTimeout(() => {
+          editGameDialog.close();
+        }, 600);
+      } else {
+        editFormStatus.className = 'form-status error';
+        editFormStatus.textContent = 'Failed to update game details. Please try again.';
+        saveEditGameBtn.disabled = false;
+        saveEditGameBtn.textContent = '💾 Save Changes';
+      }
+    });
+  }
+
+  if (editGamePlayerBtn) {
+    editGamePlayerBtn.addEventListener('click', () => {
+      if (currentPlayingGame) {
+        openEditGameModal(currentPlayingGame);
+      }
+    });
+  }
 
   // Load initial games from server or IndexedDB
   async function fetchGames() {
