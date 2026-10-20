@@ -780,6 +780,58 @@ function extractGameMetadata(targetDir, entryHtmlRel, gameItem, repoInfo, defaul
   return { title, category, author, description };
 }
 
+// PUT /api/games/:id - Update game details (Admin Only)
+app.put('/api/games/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const games = readGames();
+  const game = games.find((g) => g.id === id);
+
+  if (!game) {
+    return res.status(404).json({ error: 'Game not found.' });
+  }
+
+  const { title, category, author, description, coverUrl, playUrl } = req.body || {};
+
+  if (title !== undefined) {
+    const trimmed = String(title || '').trim();
+    if (!trimmed) {
+      return res.status(400).json({ error: 'Game title cannot be empty.' });
+    }
+    game.title = trimmed;
+  }
+
+  if (category !== undefined) {
+    game.category = String(category || 'Arcade').trim();
+  }
+
+  if (author !== undefined) {
+    game.author = String(author || 'Indie Creator').trim();
+  }
+
+  if (description !== undefined) {
+    game.description = String(description || '').trim();
+  }
+
+  if (coverUrl !== undefined) {
+    const trimmedCover = String(coverUrl || '').trim();
+    if (trimmedCover && /^https?:\/\//i.test(trimmedCover)) {
+      const saved = await downloadAndSaveCover(id, [trimmedCover]);
+      game.coverUrl = saved || trimmedCover;
+    } else {
+      game.coverUrl = trimmedCover || null;
+    }
+  }
+
+  if (playUrl !== undefined && String(playUrl || '').trim()) {
+    game.playUrl = String(playUrl).trim();
+  }
+
+  game.updatedAt = new Date().toISOString();
+  writeGames(games);
+
+  return res.json({ success: true, game });
+});
+
 // PUT /api/games/:id/icon - Save selected icon from Step 2 (Admin Only)
 app.put('/api/games/:id/icon', requireAdmin, async (req, res) => {
   const { id } = req.params;
