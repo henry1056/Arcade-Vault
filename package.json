@@ -1,0 +1,14 @@
+{
+  "name": "arcade-vault-games",
+  "version": "1.0.0",
+  "description": "Web game portal with HTML5 & ZIP game upload and instant browser play",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "express": "^4.21.2",
+    "multer": "^2.4.0"
+  }
+}
