@@ -812,9 +812,26 @@
     if (startMassImportBtn) startMassImportBtn.disabled = false;
   });
 
+  // Extract alphanumeric simplified keys to compare game titles
+  function titleKeys(title) {
+    if (!title) return [];
+    const s = String(title).toLowerCase();
+    const spaced = s.replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+    const compact = s.replace(/[^a-z0-9]/g, '');
+    return [spaced, compact].filter(Boolean);
+  }
+
+  function isSameGame(titleA, titleB) {
+    const keysA = titleKeys(titleA);
+    const keysB = titleKeys(titleB);
+    if (!keysA.length || !keysB.length) return false;
+    return keysA.some((k) => keysB.includes(k));
+  }
+
   // Client-side fallback mass import (for Cloudflare Pages static hosting)
   async function handleClientSideMassImport(lines, defaultCategory, autoPickFirstIcon) {
     let importedCount = 0;
+    let skippedCount = 0;
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
       let clean = raw.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/\.git$/i, '').replace(/\/+$/, '');
@@ -822,12 +839,26 @@
       if (parts.length < 2) continue;
       const owner = parts[0];
       const repo = parts[1];
+      const repoFullName = `${owner}/${repo}`;
 
-      appendMassConsole(`[${i + 1}/${lines.length}] Processing ${owner}/${repo}...`, 'info');
+      appendMassConsole(`[${i + 1}/${lines.length}] Processing ${repoFullName}...`, 'info');
 
       const title = repo
         .replace(/[-_]+/g, ' ')
         .replace(/\b\w/g, (c) => c.toUpperCase());
+
+      // Check if this game is already in our library
+      const alreadyExists = allGames.find((g) => {
+        if (g.sourceRepo && g.sourceRepo.toLowerCase() === repoFullName.toLowerCase()) return true;
+        if (g.title && isSameGame(g.title, title)) return true;
+        return false;
+      });
+
+      if (alreadyExists) {
+        skippedCount++;
+        appendMassConsole(`⏭️ Skipped "${title}" from ${repoFullName} (already in library as "${alreadyExists.title}")`, 'warn');
+        continue;
+      }
 
       // HTML5 game embed wrapper for static hosting
       const playUrl = `https://htmlpreview.github.io/?https://github.com/${owner}/${repo}/blob/master/index.html`;
@@ -858,6 +889,7 @@
         author: owner,
         description: `Imported from GitHub: ${owner}/${repo}`,
         sourceType: 'url',
+        sourceRepo: repoFullName,
         playUrl,
         coverUrl,
         createdAt: new Date().toISOString()
@@ -876,8 +908,9 @@
 
     massImportProgress.value = 100;
     massProgressPercent.textContent = '100%';
-    massStatusLabel.textContent = `Completed! ${importedCount} game(s) imported.`;
-    appendMassConsole(`\n🏁 Static import complete! Added ${importedCount} game(s) to IndexedDB library.`, 'success');
+    const skipNotice = skippedCount ? `, ${skippedCount} skipped` : '';
+    massStatusLabel.textContent = `Completed! ${importedCount} game(s) imported${skipNotice}.`;
+    appendMassConsole(`\n🏁 Static import complete! Added ${importedCount} game(s) to IndexedDB library (${skippedCount} skipped as already existing).`, 'success');
   }
 
   // Handle Mass GitHub Import submission
@@ -922,6 +955,7 @@
     appendMassConsole(`Icon Mode: ${autoPickFirstIcon ? 'Automatically pick 1st Google Images result' : 'Manual'}`, 'info');
 
     let totalImportedCount = 0;
+    let totalSkippedCount = 0;
 
     try {
       const response = await fetch('/api/admin/mass-import-github', {
@@ -980,6 +1014,12 @@
               if (eventData.type === 'log') {
                 appendMassConsole(eventData.message, eventData.level || 'info');
                 massStatusLabel.textContent = eventData.message;
+              } else if (eventData.type === 'game_skipped') {
+                totalSkippedCount++;
+                appendMassConsole(
+                  `⏭️ Skipped "${eventData.title}" (${eventData.reason || 'already in library'})`,
+                  'warn'
+                );
               } else if (eventData.type === 'game_imported') {
                 totalImportedCount++;
                 const newGame = eventData.game;
@@ -987,14 +1027,15 @@
                 renderGames();
 
                 appendMassConsole(`🎉 Successfully added "${newGame.title}" (${newGame.category}) to ArcadeVault!`, 'success');
-                const progressPct = Math.min(95, Math.round((totalImportedCount / (lines.length || 1)) * 100));
+                const progressPct = Math.min(95, Math.round(((totalImportedCount + totalSkippedCount) / (lines.length || 1)) * 100));
                 massImportProgress.value = progressPct;
                 massProgressPercent.textContent = `${progressPct}%`;
               } else if (eventData.type === 'complete') {
                 massImportProgress.value = 100;
                 massProgressPercent.textContent = '100%';
-                massStatusLabel.textContent = `Completed! ${eventData.totalImported} game(s) imported.`;
-                appendMassConsole(`\n🏁 Mass Import Complete! Total imported: ${eventData.totalImported}, Errors: ${eventData.totalErrors}`, 'success');
+                const skippedNotice = eventData.totalSkipped ? `, ${eventData.totalSkipped} skipped (already in library)` : '';
+                massStatusLabel.textContent = `Completed! ${eventData.totalImported} game(s) imported${skippedNotice}.`;
+                appendMassConsole(`\n🏁 Mass Import Complete! Total imported: ${eventData.totalImported}, Skipped (already in library): ${eventData.totalSkipped || 0}, Errors: ${eventData.totalErrors}`, 'success');
                 if (eventData.errors?.length > 0) {
                   eventData.errors.forEach((err) => {
                     appendMassConsole(`- ${err.url}: ${err.error}`, 'error');
@@ -1015,13 +1056,15 @@
           renderGames();
           totalImportedCount = result.importedGames.length;
         }
+        totalSkippedCount = result.totalSkipped || 0;
         massImportProgress.value = 100;
         massProgressPercent.textContent = '100%';
-        appendMassConsole(`Imported ${result.totalImported} games!`, 'success');
+        appendMassConsole(`Imported ${result.totalImported} games (${totalSkippedCount} skipped)!`, 'success');
       }
 
       startMassImportBtn.disabled = false;
-      massFormStatus.textContent = `🎉 Success! Mass import finished with ${totalImportedCount} game(s) imported and 1st Google icons applied.`;
+      const skipSummary = totalSkippedCount > 0 ? ` (${totalSkippedCount} skipped as already existing)` : '';
+      massFormStatus.textContent = `🎉 Success! Mass import finished with ${totalImportedCount} game(s) imported${skipSummary} and 1st Google icons applied.`;
       massFormStatus.hidden = false;
     } catch (err) {
       startMassImportBtn.disabled = false;
