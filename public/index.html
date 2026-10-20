@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ArcadeVault — Web Game Portal</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module">
+    if (!('commandForElement' in HTMLButtonElement.prototype)) {
+      import('https://esm.run/invokers-polyfill').catch(() => {});
+    }
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="/" class="brand" aria-label="ArcadeVault Home">
+        <svg class="brand-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="2" y="6" width="20" height="12" rx="4"></rect>
+          <path d="M6 12h4m-2-2v4"></path>
+          <circle cx="15" cy="11" r="1" fill="currentColor"></circle>
+          <circle cx="17" cy="13" r="1" fill="currentColor"></circle>
+        </svg>
+        <span class="brand-text">Arcade<span>Vault</span></span>
+      </a>
+
+      <!-- Admin-only header actions (hidden unless signed in) -->
+      <nav aria-label="Admin Navigation" class="header-actions" id="admin-header-nav" hidden>
+        <span class="admin-status-pill">Admin Mode</span>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          commandfor="upload-dialog"
+          command="show-modal"
+          id="header-upload-btn"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          Upload Game
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" id="admin-logout-btn">
+          Sign Out
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container main-content">
+    <!-- Admin Dashboard Panel (Hidden unless authenticated as Admin) -->
+    <section id="admin-panel" class="admin-panel" aria-labelledby="admin-panel-title" hidden>
+      <div class="admin-panel-header">
+        <div>
+          <p class="eyebrow">Restricted Area</p>
+          <h2 id="admin-panel-title">Admin Game Management Panel</h2>
+          <p class="admin-panel-subtitle">
+            Only you can see this panel. Upload new <code>.html</code> or <code>.zip</code> web builds, embed external URLs, or remove games from the catalog.
+          </p>
+        </div>
+        <div class="admin-panel-actions">
+          <button
+            type="button"
+            class="btn btn-primary"
+            commandfor="upload-dialog"
+            command="show-modal"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+              <path d="M12 5v14M5 12h14"></path>
+            </svg>
+            Upload New Game
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Instant Browser Arcade</p>
+        <h1 id="hero-title">Play Web Games Instantly in Your Browser</h1>
+        <p class="hero-subtitle">
+          Browse the curated library below and launch any game right in your browser with full-screen support — no downloads or installs required.
+        </p>
+      </div>
+    </section>
+
+    <search class="catalog-controls" aria-label="Filter and search games">
+      <form id="filter-form" action="/api/games" method="GET" class="filter-bar">
+        <div class="search-field-wrap">
+          <label for="search-input" class="visually-hidden">Search games by title or creator</label>
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            type="search"
+            id="search-input"
+            name="q"
+            placeholder="Search games by title, genre, or creator..."
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            enterkeyhint="search"
+          >
+        </div>
+
+        <div class="category-pills" role="group" aria-label="Filter by category" id="category-filters">
+          <button type="button" class="pill active" data-category="All" aria-pressed="true">All Games</button>
+          <button type="button" class="pill" data-category="Arcade" aria-pressed="false">Arcade</button>
+          <button type="button" class="pill" data-category="Action" aria-pressed="false">Action</button>
+          <button type="button" class="pill" data-category="Puzzle" aria-pressed="false">Puzzle</button>
+          <button type="button" class="pill" data-category="Platformer" aria-pressed="false">Platformer</button>
+          <button type="button" class="pill" data-category="Strategy" aria-pressed="false">Strategy</button>
+          <button type="button" class="pill" data-category="RPG" aria-pressed="false">RPG</button>
+          <button type="button" class="pill" data-category="Retro" aria-pressed="false">Retro</button>
+        </div>
+      </form>
+    </search>
+
+    <section class="catalog-section" aria-labelledby="catalog-heading">
+      <div class="section-header">
+        <h2 id="catalog-heading">Game Library</h2>
+        <span id="game-count" class="badge" aria-live="polite">0 games</span>
+      </div>
+
+      <div id="games-grid" class="games-grid" aria-live="polite"></div>
+
+      <div id="empty-state" class="empty-state" hidden>
+        <div class="empty-icon-wrap" aria-hidden="true">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="2" y="6" width="20" height="12" rx="4"></rect>
+            <path d="M6 12h4m-2-2v4"></path>
+            <circle cx="15" cy="11" r="1" fill="currentColor"></circle>
+            <circle cx="17" cy="13" r="1" fill="currentColor"></circle>
+          </svg>
+        </div>
+        <h3>No games published yet</h3>
+        <p id="empty-state-desc">Check back soon for new playable browser games.</p>
+        <button
+          type="button"
+          class="btn btn-primary"
+          commandfor="upload-dialog"
+          command="show-modal"
+          id="empty-upload-btn"
+          hidden
+        >
+          Upload Your First Game
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>ArcadeVault — Web Game Portal</p>
+      <button
+        type="button"
+        class="admin-link-btn"
+        commandfor="admin-login-dialog"
+        command="show-modal"
+        id="footer-admin-btn"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        Admin Access
+      </button>
+    </div>
+  </footer>
+
+  <!-- Admin Sign-In Modal Dialog -->
+  <dialog id="admin-login-dialog" class="modal-dialog login-modal" closedby="any" aria-labelledby="admin-login-title">
+    <div class="modal-header">
+      <h2 id="admin-login-title">Admin Sign In</h2>
+      <button
+        type="button"
+        class="icon-btn"
+        commandfor="admin-login-dialog"
+        command="close"
+        aria-label="Close sign in dialog"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <form id="admin-login-form" action="/api/admin/login" method="POST" novalidate>
+      <div class="modal-body">
+        <div class="field">
+          <label for="username">Admin Username <span class="req-marker" aria-hidden="true">*</span></label>
+          <span id="username-hint" class="hint">Enter your administrator username.</span>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            autocomplete="username"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            enterkeyhint="next"
+            required
+            aria-describedby="username-hint"
+            aria-errormessage="username-error"
+          >
+          <div id="username-error" class="error-msg">
+            <span aria-hidden="true">⚠️</span> Please enter your admin username.
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label-row">
+            <label for="current-password">Password <span class="req-marker" aria-hidden="true">*</span></label>
+            <button
+              id="toggle-password"
+              type="button"
+              class="password-toggle-btn"
+              aria-pressed="false"
+              aria-label="Show password"
+              aria-describedby="toggle-warning"
+            >
+              Show
+            </button>
+            <span id="toggle-warning" class="visually-hidden">Warning: this will display your password on the screen.</span>
+          </div>
+          <span id="password-hint" class="hint">Enter your administrator password to unlock game uploads.</span>
+          <input
+            type="password"
+            id="current-password"
+            name="password"
+            autocomplete="current-password"
+            enterkeyhint="done"
+            required
+            aria-describedby="password-hint"
+            aria-errormessage="password-error"
+          >
+          <div id="password-error" class="error-msg">
+            <span aria-hidden="true">⚠️</span> Please enter your password.
+          </div>
+        </div>
+
+        <div id="login-status" class="form-status" role="alert" aria-live="assertive" hidden></div>
+      </div>
+
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          commandfor="admin-login-dialog"
+          command="close"
+        >
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary" id="login-submit-btn">
+          Sign In
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Upload Game Modal Dialog (Admin Only - 2-Step Workflow) -->
+  <dialog id="upload-dialog" class="modal-dialog" closedby="any" aria-labelledby="upload-dialog-title">
+    <div class="modal-header">
+      <h2 id="upload-dialog-title">Upload a Web Game</h2>
+      <button
+        type="button"
+        class="icon-btn"
+        commandfor="upload-dialog"
+        command="close"
+        aria-label="Close upload dialog"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <nav aria-label="Upload Progress" class="step-nav">
+      <ol class="progress-tracker">
+        <li id="step-tracker-1" class="step-active" aria-current="step">Step 1: Upload Game</li>
+        <li id="step-tracker-2" class="step-todo">Step 2: Select Icon</li>
+      </ol>
+    </nav>
+
+    <!-- STEP 1: Upload Game Form -->
+    <form id="upload-form" action="/api/games" method="POST" enctype="multipart/form-data" novalidate>
+      <div class="modal-body">
+        <div class="field">
+          <label for="game-title">Game Title <span class="req-marker" aria-hidden="true">*</span></label>
+          <span id="title-hint" class="hint">2 to 80 characters. Used automatically to search Google Images for your game's icon in Step 2.</span>
+          <input
+            type="text"
+            id="game-title"
+            name="title"
+            required
+            minlength="2"
+            maxlength="80"
+            aria-describedby="title-hint"
+            aria-errormessage="title-error"
+            enterkeyhint="next"
+          >
+          <div id="title-error" class="error-msg">
+            <span aria-hidden="true">⚠️</span> Please enter a game title (at least 2 characters).
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="game-category">Category</label>
+            <span id="category-hint" class="hint">Primary genre tag.</span>
+            <select id="game-category" name="category" aria-describedby="category-hint">
+              <option value="Arcade">Arcade</option>
+              <option value="Action">Action</option>
+              <option value="Puzzle">Puzzle</option>
+              <option value="Platformer">Platformer</option>
+              <option value="Strategy">Strategy</option>
+              <option value="RPG">RPG</option>
+              <option value="Retro">Retro</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="game-author">Creator / Studio</label>
+            <span id="author-hint" class="hint">Optional creator credit.</span>
+            <input
+              type="text"
+              id="game-author"
+              name="author"
+              maxlength="60"
+              aria-describedby="author-hint"
+              enterkeyhint="next"
+            >
+          </div>
+        </div>
+
+        <fieldset class="source-fieldset">
+          <legend>Game Source <span class="req-marker" aria-hidden="true">*</span></legend>
+          <div class="radio-group">
+            <label class="radio-card" for="source-file">
+              <input type="radio" id="source-file" name="sourceType" value="file" checked>
+              <span class="radio-title">Upload File (<code>.html</code> or <code>.zip</code>)</span>
+              <span class="radio-desc">Host your playable web build directly on this server</span>
+            </label>
+
+            <label class="radio-card" for="source-url">
+              <input type="radio" id="source-url" name="sourceType" value="url">
+              <span class="radio-title">Paste Web Game URL</span>
+              <span class="radio-desc">Embed an existing HTML5 game via HTTPS URL</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <!-- File Upload Dropzone -->
+        <div id="file-source-group" class="field">
+          <label for="game-file">Game Package File <span class="req-marker" aria-hidden="true">*</span></label>
+          <span id="file-hint" class="hint">Upload a single <code>.html</code> file or a <code>.zip</code> archive containing an <code>index.html</code> (max 150 MB).</span>
+          <div class="file-dropzone" id="dropzone">
+            <input
+              type="file"
+              id="game-file"
+              name="gameFile"
+              accept=".html,.htm,.zip,text/html,application/zip"
+              required
+              aria-describedby="file-hint"
+              aria-errormessage="file-error"
+            >
+            <div class="dropzone-prompt" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="12" y1="18" x2="12" y2="12"></line>
+                <polyline points="9 15 12 12 15 15"></polyline>
+              </svg>
+              <p id="selected-file-label"><strong>Choose a .html or .zip file</strong> or drag it here</p>
+            </div>
+          </div>
+          <div id="file-error" class="error-msg">
+            <span aria-hidden="true">⚠️</span> Please select an <code>.html</code> or <code>.zip</code> game file.
+          </div>
+        </div>
+
+        <!-- External URL Input -->
+        <div id="url-source-group" class="field" hidden>
+          <label for="game-url">Playable Game URL <span class="req-marker" aria-hidden="true">*</span></label>
+          <span id="url-hint" class="hint">Format: https://example.com/my-game/index.html</span>
+          <input
+            type="url"
+            id="game-url"
+            name="gameUrl"
+            pattern="https?://.+"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            aria-describedby="url-hint"
+            aria-errormessage="url-error"
+          >
+          <div id="url-error" class="error-msg">
+            <span aria-hidden="true">⚠️</span> Please enter a valid URL starting with <code>http://</code> or <code>https://</code>.
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="game-description">Description &amp; Controls</label>
+          <span id="desc-hint" class="hint">Tell players how to play (e.g., WASD / Arrow keys, mouse controls).</span>
+          <textarea
+            id="game-description"
+            name="description"
+            rows="3"
+            maxlength="600"
+            aria-describedby="desc-hint"
+          ></textarea>
+        </div>
+
+        <div id="upload-progress-wrap" class="progress-wrap" hidden>
+          <label for="upload-progress" id="upload-progress-label">Uploading game package...</label>
+          <progress id="upload-progress" class="loading-bar" value="0" max="100" style="--brand-hue: 255;"></progress>
+        </div>
+
+        <div id="form-status" class="form-status" role="alert" aria-live="assertive" hidden></div>
+      </div>
+
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          commandfor="upload-dialog"
+          command="close"
+        >
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary" id="submit-upload-btn" enterkeyhint="next">
+          Next: Select Icon →
+        </button>
+      </div>
+    </form>
+
+    <!-- STEP 2: Select Icon from Top 5 Google Images Results -->
+    <form id="icon-select-form" novalidate hidden>
+      <div class="modal-body">
+        <div class="icon-search-banner">
+          <div>
+            <p class="icon-search-title">
+              Google Images Search: <code id="icon-search-query-badge">game icon</code>
+            </p>
+            <p class="hint" style="margin: 0;">
+              Showing the top 5 icon results for your uploaded game. Click an icon below to select it.
+            </p>
+          </div>
+        </div>
+
+        <div id="icon-loading-state" class="icon-loading-state">
+          <p>Searching Google Images for <strong id="icon-loading-query"></strong>...</p>
+        </div>
+
+        <fieldset id="icon-results-fieldset" class="icon-results-fieldset" hidden>
+          <legend>Top 5 Icon Results (Select One)</legend>
+          <div id="icon-results-grid" class="icon-results-grid"></div>
+        </fieldset>
+
+        <div id="icon-step-status" class="form-status" role="alert" aria-live="assertive" hidden></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="skip-icon-btn">
+          Skip (Keep Default)
+        </button>
+        <button type="submit" class="btn btn-primary" id="save-icon-btn" enterkeyhint="done">
+          Save Selected Icon &amp; Play
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Game Player Modal Dialog -->
+  <dialog id="player-dialog" class="modal-dialog player-modal" closedby="any" aria-labelledby="player-dialog-title">
+    <div class="player-header">
+      <div class="player-meta">
+        <span id="player-category" class="badge">Arcade</span>
+        <h2 id="player-dialog-title">Game Title</h2>
+        <span id="player-author" class="player-author"></span>
+      </div>
+      <div class="player-controls">
+        <button type="button" class="btn btn-secondary btn-sm" id="reload-game-btn">
+          Reload
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" id="fullscreen-game-btn">
+          Fullscreen
+        </button>
+        <a id="open-new-tab-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">
+          New Tab ↗
+        </a>
+        <button
+          type="button"
+          class="icon-btn"
+          commandfor="player-dialog"
+          command="close"
+          aria-label="Close game player"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="player-stage" id="player-stage">
+      <iframe
+        id="game-iframe"
+        title="Playable Web Game"
+        sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-modals allow-popups"
+        allow="fullscreen; autoplay; gamepad"
+      ></iframe>
+    </div>
+
+    <div class="player-footer">
+      <p id="player-description" class="player-description"></p>
+      <button type="button" class="btn btn-danger btn-sm" id="delete-game-btn" hidden>
+        Delete Game
+      </button>
+    </div>
+  </dialog>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
