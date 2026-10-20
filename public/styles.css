@@ -334,6 +334,7 @@ code {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   overflow: hidden;
+  cursor: pointer;
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -1298,6 +1299,206 @@ input.user-valid-fallback {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 80px;
+}
+
+/* Dedicated Game Page View */
+.game-page-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-block-end: 2.5rem;
+}
+
+.game-page-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.85rem 1.25rem;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.game-page-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.crumb-separator {
+  color: var(--border-subtle);
+}
+
+.crumb-current {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.game-page-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.game-page-stage-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 480px;
+  max-height: 78vh;
+  background-color: #000000;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.65);
+}
+
+.game-page-stage-wrap:fullscreen {
+  max-height: 100vh;
+  aspect-ratio: unset;
+  border-radius: 0;
+  border: 0;
+}
+
+.game-page-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background-color: #000000;
+}
+
+.game-page-stage-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 13, 20, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  z-index: 5;
+  transition: opacity 0.2s ease;
+}
+
+.game-page-helper-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 1rem;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.game-page-info-card {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1.75rem;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.game-page-info-cover {
+  width: 120px;
+  height: 120px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+  flex-shrink: 0;
+  background-color: var(--bg-input);
+  position: relative;
+}
+
+.game-page-info-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.game-page-info-main {
+  flex: 1;
+  min-width: 280px;
+}
+
+.game-page-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block-end: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.game-page-title-row h1 {
+  margin: 0;
+  font-size: clamp(1.4rem, 2.5vw, 1.85rem);
+}
+
+.game-page-author-text {
+  margin: 0 0 0.85rem;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+}
+
+.info-section-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.88rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.game-page-desc-box {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.game-page-related-section {
+  margin-block-start: 1rem;
+}
+
+.game-page-related-section h3 {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+}
+
+/* Toast Notice */
+.toast-notice {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 100;
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  color: #fff;
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: toastFade 2.5s forwards ease-in-out;
+}
+
+@keyframes toastFade {
+  0% { opacity: 0; transform: translateY(12px); }
+  15% { opacity: 1; transform: translateY(0); }
+  85% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-8px); }
 }
 
 [hidden] {
