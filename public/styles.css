@@ -873,6 +873,13 @@ input.user-valid-fallback {
   background-color: var(--bg-surface);
 }
 
+.player-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .player-description {
   margin: 0;
   color: var(--text-secondary);
@@ -1184,6 +1191,113 @@ input.user-valid-fallback {
 
 .password-toggle-btn:hover {
   border-color: var(--accent-hover);
+}
+
+/* Edit Game Details Modal */
+.edit-game-modal {
+  max-width: 620px;
+}
+
+.edit-cover-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.edit-cover-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-input);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.edit-cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.edit-cover-inputs {
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-cover-url-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.edit-cover-url-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-icon-search-section {
+  margin-block-start: 0.75rem;
+  padding: 0.85rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+}
+
+.edit-icon-search-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-block-end: 0.5rem;
+}
+
+.edit-icon-search-header .hint {
+  margin: 0;
+}
+
+.edit-icon-choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border-subtle);
+  background-color: var(--bg-input);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+
+.edit-icon-choice-card:hover {
+  border-color: var(--accent-hover);
+  transform: translateY(-2px);
+}
+
+.edit-icon-choice-card.selected {
+  border-color: var(--accent);
+  background-color: rgba(99, 102, 241, 0.12);
+}
+
+.edit-icon-choice-card img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.edit-icon-choice-card span {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
 }
 
 [hidden] {
