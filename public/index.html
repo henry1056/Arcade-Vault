@@ -99,6 +99,8 @@
       </div>
     </section>
 
+    <!-- Catalog View (Home & Library) -->
+    <div id="catalog-view" class="catalog-view">
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
         <p class="eyebrow">Instant Browser Arcade</p>
@@ -185,6 +187,98 @@
           </button>
         </div>
       </div>
+    </section>
+    </div>
+
+    <!-- Dedicated Game Page View (Activated when a game is clicked or opened via URL) -->
+    <section id="game-page-view" class="game-page-view" aria-labelledby="game-page-title" hidden>
+      <!-- Navigation / Top Actions Bar -->
+      <nav class="game-page-nav" aria-label="Game Page Navigation">
+        <div class="game-page-breadcrumbs">
+          <button type="button" class="btn btn-secondary btn-sm" id="game-page-back-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            ← Back to Games
+          </button>
+          <span class="crumb-separator" aria-hidden="true">/</span>
+          <span id="game-page-crumb-category" class="badge">Arcade</span>
+          <span class="crumb-separator" aria-hidden="true">/</span>
+          <span id="game-page-crumb-title" class="crumb-current">Game Title</span>
+        </div>
+
+        <div class="game-page-toolbar">
+          <button type="button" class="btn btn-secondary btn-sm" id="game-page-reload-btn" title="Restart game">
+            ⟳ Reload
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" id="game-page-fullscreen-btn" title="Toggle Fullscreen">
+            ⛶ Fullscreen
+          </button>
+          <a id="game-page-newtab-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" title="Open in new window">
+            ↗ New Tab
+          </a>
+          <button type="button" class="btn btn-secondary btn-sm" id="game-page-share-btn" title="Copy game link">
+            📋 Share
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" id="game-page-edit-btn" hidden title="Edit game details (Admin)">
+            ✏️ Edit Details
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" id="game-page-delete-btn" hidden title="Delete game (Admin)">
+            Delete Game
+          </button>
+        </div>
+      </nav>
+
+      <!-- Game Stage / Screen -->
+      <div class="game-page-stage-wrap" id="game-page-stage-wrap">
+        <iframe
+          id="game-page-iframe"
+          class="game-page-iframe"
+          title="Playable Web Game"
+          sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-modals allow-popups"
+          allow="fullscreen; autoplay; gamepad; clipboard-read; clipboard-write"
+        ></iframe>
+
+        <div id="game-page-loader" class="game-page-stage-overlay" hidden>
+          <p class="hint">Loading game...</p>
+        </div>
+      </div>
+
+      <!-- Stage Helper Notice -->
+      <div class="game-page-helper-bar">
+        <span>💡 Click inside the game screen to focus keyboard controls. Press <strong>Esc</strong> to exit fullscreen.</span>
+        <a id="game-page-troubleshoot-link" href="#" target="_blank" rel="noopener noreferrer" class="text-link-btn" style="margin-inline-start: auto;">
+          Having trouble loading? Open directly ↗
+        </a>
+      </div>
+
+      <!-- Game Details & Metadata Card -->
+      <div class="game-page-info-card">
+        <div class="game-page-info-cover">
+          <img id="game-page-cover-img" src="" alt="Game Icon" width="120" height="120">
+        </div>
+        <div class="game-page-info-main">
+          <div class="game-page-title-row">
+            <h1 id="game-page-title">Game Title</h1>
+            <span id="game-page-category-badge" class="badge">Arcade</span>
+            <span id="game-page-source-badge" class="card-source-tag">Web Game</span>
+          </div>
+          <p id="game-page-author" class="game-page-author-text">By Indie Creator</p>
+          <div class="game-page-desc-wrap">
+            <h4 class="info-section-title">Description &amp; Controls</h4>
+            <p id="game-page-desc" class="game-page-desc-box">No description provided.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- More Games / Recommended Games Section -->
+      <section class="game-page-related-section" aria-labelledby="related-games-heading">
+        <div class="section-header">
+          <h3 id="related-games-heading">🎮 More Games You Might Like</h3>
+        </div>
+        <div id="game-page-related-grid" class="games-grid"></div>
+      </section>
     </section>
   </main>
 
