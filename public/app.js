@@ -314,6 +314,18 @@
   const emptyAdminActions = document.getElementById('empty-admin-actions');
   const emptyMassImportBtn = document.getElementById('empty-mass-import-btn');
 
+  // DOM Elements - Manage & Undo Uploaded Repositories
+  const manageReposDialog = document.getElementById('manage-repos-dialog');
+  const headerManageReposBtn = document.getElementById('header-manage-repos-btn');
+  const bannerManageReposBtn = document.getElementById('banner-manage-repos-btn');
+  const massUndoRecentBtn = document.getElementById('mass-undo-recent-btn');
+  const quickUndoBatchBanner = document.getElementById('quick-undo-batch-banner');
+  const quickUndoBatchBtn = document.getElementById('quick-undo-batch-btn');
+  const quickUndoBatchLabel = document.getElementById('quick-undo-batch-label');
+  const reposListContainer = document.getElementById('repos-list-container');
+  const reposEmptyState = document.getElementById('repos-empty-state');
+  const reposCountBadge = document.getElementById('repos-count-badge');
+
   // DOM Elements - Edit Game Details Dialog
   const editGameDialog = document.getElementById('edit-game-dialog');
   const editGameForm = document.getElementById('edit-game-form');
@@ -382,6 +394,8 @@
     deleteGameBtn.hidden = !isAdmin;
     if (gamePageEditBtn) gamePageEditBtn.hidden = !isAdmin;
     if (gamePageDeleteBtn) gamePageDeleteBtn.hidden = !isAdmin;
+    if (headerManageReposBtn) headerManageReposBtn.hidden = !isAdmin;
+    if (bannerManageReposBtn) bannerManageReposBtn.hidden = !isAdmin;
     footerAdminBtn.hidden = isAdmin;
 
     emptyStateDesc.textContent = isAdmin
@@ -1351,6 +1365,7 @@
     let importedCount = 0;
     let skippedCount = 0;
     let errorCount = 0;
+    const sessionGameIds = [];
 
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
@@ -1519,6 +1534,7 @@
 
         allGames.unshift(newGame);
         await idbSaveGame(newGame);
+        sessionGameIds.push(newGame.id);
         renderGames();
         importedCount++;
 
@@ -1539,6 +1555,9 @@
     );
 
     startMassImportBtn.disabled = false;
+    if (sessionGameIds.length > 0) {
+      setLastImportedBatch(sessionGameIds, `${sessionGameIds.length} games`);
+    }
     const skipSummary = skippedCount > 0 ? ` (${skippedCount} skipped as already in library)` : '';
     massFormStatus.textContent = `🎉 Success! Mass import finished with ${importedCount} game(s) imported${skipSummary} and 1st Google icons applied.`;
     massFormStatus.hidden = false;
@@ -1587,6 +1606,7 @@
 
     let totalImportedCount = 0;
     let totalSkippedCount = 0;
+    const sessionImportedIds = [];
 
     try {
       let response = null;
@@ -1674,6 +1694,7 @@
               } else if (eventData.type === 'game_imported') {
                 totalImportedCount++;
                 const newGame = eventData.game;
+                sessionImportedIds.push(newGame.id);
                 allGames.unshift(newGame);
                 renderGames();
 
@@ -1688,6 +1709,9 @@
                 massProgressPercent.textContent = '100%';
                 const skippedNotice = eventData.totalSkipped ? `, ${eventData.totalSkipped} skipped (already in library)` : '';
                 massStatusLabel.textContent = `Completed! ${eventData.totalImported} game(s) imported${skippedNotice}.`;
+                if (sessionImportedIds.length > 0) {
+                  setLastImportedBatch(sessionImportedIds, `${sessionImportedIds.length} games`);
+                }
                 appendMassConsole(`\n🏁 Mass Import Complete! Total imported: ${eventData.totalImported}, Skipped (already in library): ${eventData.totalSkipped || 0}, Errors: ${eventData.totalErrors}`, 'success');
                 if (eventData.errors?.length > 0) {
                   eventData.errors.forEach((err) => {
@@ -1705,9 +1729,13 @@
         if (Array.isArray(result.importedGames)) {
           for (const g of result.importedGames) {
             allGames.unshift(g);
+            sessionImportedIds.push(g.id);
           }
           renderGames();
           totalImportedCount = result.importedGames.length;
+          if (sessionImportedIds.length > 0) {
+            setLastImportedBatch(sessionImportedIds, `${sessionImportedIds.length} games`);
+          }
         }
         totalSkippedCount = result.totalSkipped || 0;
         massImportProgress.value = 100;
@@ -2153,6 +2181,272 @@
     }
   });
 
+
+  
+  // ==========================================
+  // Undo Repo Uploads & Repository Management
+  // ==========================================
+  let lastImportedSessionGameIds = [];
+  try {
+    lastImportedSessionGameIds = JSON.parse(sessionStorage.getItem('arcade_last_import_ids') || '[]');
+  } catch {}
+  let lastImportedSessionLabel = sessionStorage.getItem('arcade_last_import_label') || '';
+
+  function setLastImportedBatch(ids, label) {
+    lastImportedSessionGameIds = Array.isArray(ids) ? ids : [];
+    lastImportedSessionLabel = label || '';
+    if (lastImportedSessionGameIds.length > 0) {
+      sessionStorage.setItem('arcade_last_import_ids', JSON.stringify(lastImportedSessionGameIds));
+      sessionStorage.setItem('arcade_last_import_label', lastImportedSessionLabel);
+      if (massUndoRecentBtn) {
+        massUndoRecentBtn.hidden = false;
+        massUndoRecentBtn.textContent = `↩️ Undo This Import (${lastImportedSessionGameIds.length})`;
+      }
+      if (quickUndoBatchBanner) {
+        quickUndoBatchBanner.hidden = false;
+        if (quickUndoBatchLabel) quickUndoBatchLabel.textContent = `${lastImportedSessionGameIds.length} games imported`;
+      }
+    } else {
+      sessionStorage.removeItem('arcade_last_import_ids');
+      sessionStorage.removeItem('arcade_last_import_label');
+      if (massUndoRecentBtn) massUndoRecentBtn.hidden = true;
+      if (quickUndoBatchBanner) quickUndoBatchBanner.hidden = true;
+    }
+  }
+
+  // Initialize undo button state on page load
+  if (lastImportedSessionGameIds.length > 0) {
+    setLastImportedBatch(lastImportedSessionGameIds, lastImportedSessionLabel);
+  }
+
+  // Undo an entire imported repository
+  async function undoRepoUpload(repoFullName, count) {
+    const confirmed = window.confirm(
+      `Undo upload of "${repoFullName}"?\n\nThis will permanently delete all ${count} game(s) imported from this repository.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch('/api/admin/undo-repo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo: repoFullName })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const removedIds = new Set(data.removedGameIds || []);
+        allGames = allGames.filter((g) => !removedIds.has(g.id));
+        if (currentPlayingGame && removedIds.has(currentPlayingGame.id)) {
+          showCatalogView();
+        }
+        renderGames();
+        renderImportedReposModal();
+        showToast(`↩️ Removed all ${data.removedCount} games from ${repoFullName}`);
+        return;
+      }
+    } catch {
+      // Fallback below
+    }
+
+    // Client-side fallback (for Cloudflare Pages static hosting)
+    const lowerTarget = repoFullName.toLowerCase();
+    const toRemove = allGames.filter((g) => g.sourceRepo && g.sourceRepo.toLowerCase() === lowerTarget);
+    for (const g of toRemove) {
+      await idbDeleteGame(g.id);
+    }
+    allGames = allGames.filter((g) => !g.sourceRepo || g.sourceRepo.toLowerCase() !== lowerTarget);
+    if (currentPlayingGame && currentPlayingGame.sourceRepo && currentPlayingGame.sourceRepo.toLowerCase() === lowerTarget) {
+      showCatalogView();
+    }
+    renderGames();
+    renderImportedReposModal();
+    showToast(`↩️ Removed all ${toRemove.length} games from ${repoFullName}`);
+  }
+
+  // Undo the most recent import session
+  async function undoRecentImportBatch() {
+    if (!lastImportedSessionGameIds || lastImportedSessionGameIds.length === 0) return;
+
+    const count = lastImportedSessionGameIds.length;
+    const confirmed = window.confirm(
+      `Undo recent import session?\n\nThis will remove all ${count} game(s) that were just added.`
+    );
+    if (!confirmed) return;
+
+    const idSet = new Set(lastImportedSessionGameIds);
+
+    try {
+      const res = await fetch('/api/admin/undo-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameIds: lastImportedSessionGameIds })
+      });
+
+      if (res.ok) {
+        allGames = allGames.filter((g) => !idSet.has(g.id));
+        if (currentPlayingGame && idSet.has(currentPlayingGame.id)) {
+          showCatalogView();
+        }
+        renderGames();
+        setLastImportedBatch([], '');
+        renderImportedReposModal();
+        appendMassConsole(`↩️ Undid import session: successfully removed ${count} game(s) from library.`, 'warn');
+        showToast(`↩️ Successfully undid import: removed ${count} games.`);
+        return;
+      }
+    } catch {
+      // Fallback below
+    }
+
+    // Client-side fallback
+    for (const id of lastImportedSessionGameIds) {
+      await idbDeleteGame(id);
+    }
+    allGames = allGames.filter((g) => !idSet.has(g.id));
+    if (currentPlayingGame && idSet.has(currentPlayingGame.id)) {
+      showCatalogView();
+    }
+    renderGames();
+    setLastImportedBatch([], '');
+    renderImportedReposModal();
+    appendMassConsole(`↩️ Undid import session: successfully removed ${count} game(s) from library.`, 'warn');
+    showToast(`↩️ Successfully undid import: removed ${count} games.`);
+  }
+
+  // Render the list of imported repositories in the manage modal
+  function renderImportedReposModal() {
+    if (!reposListContainer) return;
+    reposListContainer.innerHTML = '';
+
+    // Group games by sourceRepo
+    const repoMap = new Map();
+    for (const g of allGames) {
+      if (!g.sourceRepo) continue;
+      const key = g.sourceRepo.trim();
+      if (!repoMap.has(key)) {
+        repoMap.set(key, []);
+      }
+      repoMap.get(key).push(g);
+    }
+
+    const repos = Array.from(repoMap.entries()).sort((a, b) => b[1].length - a[1].length);
+
+    if (reposCountBadge) {
+      reposCountBadge.textContent = `${repos.length} ${repos.length === 1 ? 'Repository' : 'Repositories'}`;
+    }
+
+    // Quick undo session banner
+    if (quickUndoBatchBanner) {
+      const hasRecent = lastImportedSessionGameIds && lastImportedSessionGameIds.length > 0;
+      quickUndoBatchBanner.hidden = !hasRecent;
+      if (hasRecent && quickUndoBatchLabel) {
+        quickUndoBatchLabel.textContent = `${lastImportedSessionGameIds.length} games imported`;
+      }
+    }
+
+    if (repos.length === 0) {
+      if (reposEmptyState) reposEmptyState.hidden = false;
+      return;
+    }
+
+    if (reposEmptyState) reposEmptyState.hidden = true;
+
+    repos.forEach(([repoName, gamesList]) => {
+      const card = document.createElement('div');
+      card.className = 'repo-manage-card';
+
+      const left = document.createElement('div');
+      left.className = 'repo-manage-left';
+
+      const headerRow = document.createElement('div');
+      headerRow.className = 'repo-manage-header';
+
+      const link = document.createElement('a');
+      link.className = 'repo-title-link';
+      link.href = `https://github.com/${encodeURI(repoName)}`;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+        </svg>
+        ${escapeHtml(repoName)}
+      `;
+
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = `${gamesList.length} ${gamesList.length === 1 ? 'game' : 'games'}`;
+
+      headerRow.append(link, badge);
+
+      const chipsList = document.createElement('div');
+      chipsList.className = 'repo-chips-list';
+
+      const previewGames = gamesList.slice(0, 6);
+      previewGames.forEach((g) => {
+        const chip = document.createElement('span');
+        chip.className = 'repo-chip';
+        chip.textContent = g.title;
+        chipsList.appendChild(chip);
+      });
+
+      if (gamesList.length > 6) {
+        const moreChip = document.createElement('span');
+        moreChip.className = 'repo-chip';
+        moreChip.textContent = `+${gamesList.length - 6} more`;
+        chipsList.appendChild(moreChip);
+      }
+
+      left.append(headerRow, chipsList);
+
+      const undoBtn = document.createElement('button');
+      undoBtn.type = 'button';
+      undoBtn.className = 'btn btn-danger btn-sm';
+      undoBtn.innerHTML = `↩️ Undo / Remove (${gamesList.length})`;
+      undoBtn.title = `Remove all ${gamesList.length} games imported from ${repoName}`;
+      undoBtn.addEventListener('click', () => {
+        undoRepoUpload(repoName, gamesList.length);
+      });
+
+      card.append(left, undoBtn);
+      reposListContainer.appendChild(card);
+    });
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // Event Listeners for Repo Management Dialog
+  ['header-manage-repos-btn', 'banner-manage-repos-btn'].forEach((btnId) => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      btn.addEventListener('click', () => {
+        renderImportedReposModal();
+        if (manageReposDialog && typeof manageReposDialog.showModal === 'function' && !manageReposDialog.open) {
+          manageReposDialog.showModal();
+        }
+      });
+    }
+  });
+
+  if (massUndoRecentBtn) {
+    massUndoRecentBtn.addEventListener('click', () => {
+      undoRecentImportBatch();
+    });
+  }
+
+  if (quickUndoBatchBtn) {
+    quickUndoBatchBtn.addEventListener('click', () => {
+      undoRecentImportBatch();
+    });
+  }
 
   // ==========================================
   // Edit Game Modal Handlers

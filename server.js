@@ -1131,6 +1131,119 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
   }
 });
 
+
+// GET /api/admin/imported-repos - List all repositories with games in the library (Admin Only)
+app.get('/api/admin/imported-repos', requireAdmin, (req, res) => {
+  const games = readGames();
+  const repoMap = new Map();
+
+  for (const game of games) {
+    if (!game.sourceRepo) continue;
+    const repoKey = game.sourceRepo.trim();
+    if (!repoMap.has(repoKey)) {
+      repoMap.set(repoKey, {
+        repo: repoKey,
+        gameCount: 0,
+        games: [],
+        latestImport: game.createdAt || null
+      });
+    }
+    const entry = repoMap.get(repoKey);
+    entry.gameCount++;
+    entry.games.push({
+      id: game.id,
+      title: game.title,
+      category: game.category,
+      coverUrl: game.coverUrl
+    });
+    if (game.createdAt && (!entry.latestImport || game.createdAt > entry.latestImport)) {
+      entry.latestImport = game.createdAt;
+    }
+  }
+
+  const result = Array.from(repoMap.values()).sort((a, b) => {
+    return (b.latestImport || '').localeCompare(a.latestImport || '');
+  });
+
+  res.json({ repos: result });
+});
+
+// POST /api/admin/undo-repo - Undo/remove all games uploaded from a specific repository (Admin Only)
+app.post('/api/admin/undo-repo', requireAdmin, (req, res) => {
+  const { repo = '' } = req.body || {};
+  const cleanRepo = String(repo).trim();
+
+  if (!cleanRepo) {
+    return res.status(400).json({ error: 'Repository identifier is required.' });
+  }
+
+  const games = readGames();
+  const lowerTarget = cleanRepo.toLowerCase();
+  const matchingGames = games.filter(
+    (g) => g.sourceRepo && g.sourceRepo.toLowerCase() === lowerTarget
+  );
+
+  if (matchingGames.length === 0) {
+    return res.status(404).json({ error: `No games found in library from repository "${cleanRepo}".` });
+  }
+
+  // Remove hosted game directories from disk
+  for (const g of matchingGames) {
+    const targetDir = path.join(GAMES_DIR, g.id);
+    if (fs.existsSync(targetDir)) {
+      try {
+        fs.rmSync(targetDir, { recursive: true, force: true });
+      } catch (e) {
+        console.warn(`Could not delete directory for game ${g.id}:`, e.message);
+      }
+    }
+  }
+
+  const remainingGames = games.filter(
+    (g) => !g.sourceRepo || g.sourceRepo.toLowerCase() !== lowerTarget
+  );
+  writeGames(remainingGames);
+
+  res.json({
+    success: true,
+    removedCount: matchingGames.length,
+    repo: cleanRepo,
+    removedGameIds: matchingGames.map((g) => g.id)
+  });
+});
+
+// POST /api/admin/undo-batch - Undo a specific batch of game IDs (Admin Only)
+app.post('/api/admin/undo-batch', requireAdmin, (req, res) => {
+  const { gameIds = [] } = req.body || {};
+  if (!Array.isArray(gameIds) || gameIds.length === 0) {
+    return res.status(400).json({ error: 'Array of gameIds is required.' });
+  }
+
+  const idSet = new Set(gameIds);
+  const games = readGames();
+  const matchingGames = games.filter((g) => idSet.has(g.id));
+
+  for (const g of matchingGames) {
+    const targetDir = path.join(GAMES_DIR, g.id);
+    if (fs.existsSync(targetDir)) {
+      try {
+        fs.rmSync(targetDir, { recursive: true, force: true });
+      } catch (e) {
+        console.warn(`Could not delete directory for game ${g.id}:`, e.message);
+      }
+    }
+  }
+
+  const remainingGames = games.filter((g) => !idSet.has(g.id));
+  writeGames(remainingGames);
+
+  res.json({
+    success: true,
+    removedCount: matchingGames.length,
+    removedGameIds: matchingGames.map((g) => g.id)
+  });
+});
+
 const upload = multer({
   dest: TMP_DIR,
   limits: {

@@ -1501,6 +1501,105 @@ input.user-valid-fallback {
   100% { opacity: 0; transform: translateY(-8px); }
 }
 
+
+/* Manage & Undo Uploaded Repositories Modal */
+.manage-repos-modal {
+  width: min(720px, 100% - 1.5rem);
+  max-width: 720px;
+}
+
+.quick-undo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.15rem;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(185, 28, 28, 0.08));
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: var(--radius-md);
+  margin-block-end: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.quick-undo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.repos-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-height: 440px;
+  overflow-y: auto;
+  padding-inline-end: 0.25rem;
+}
+
+.repo-manage-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.1rem 1.25rem;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: border-color 0.18s ease;
+  flex-wrap: wrap;
+}
+
+.repo-manage-card:hover {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.repo-manage-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 240px;
+}
+
+.repo-manage-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.repo-title-link {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text-primary);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.repo-title-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.repo-chips-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.repo-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
 [hidden] {
   display: none !important;
 }

@@ -53,6 +53,20 @@
           </svg>
           ⚡ Mass GitHub Import
         </button>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          commandfor="manage-repos-dialog"
+          command="show-modal"
+          id="header-manage-repos-btn"
+          title="Manage and undo uploaded repositories"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+          </svg>
+          ↩️ Undo Repos
+        </button>
         <button type="button" class="btn btn-secondary btn-sm" id="admin-logout-btn">
           Sign Out
         </button>
@@ -83,6 +97,20 @@
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
             </svg>
             ⚡ Mass GitHub Import
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            commandfor="manage-repos-dialog"
+            command="show-modal"
+            id="banner-manage-repos-btn"
+            title="Manage and undo uploaded repositories"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polyline points="1 4 1 10 7 10"></polyline>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            </svg>
+            ↩️ Undo Repo Uploads
           </button>
           <button
             type="button"
@@ -735,6 +763,15 @@
       <div class="modal-footer">
         <button
           type="button"
+          class="btn btn-danger"
+          id="mass-undo-recent-btn"
+          hidden
+          title="Undo this import and remove all games that were just added"
+        >
+          ↩️ Undo This Import
+        </button>
+        <button
+          type="button"
           class="btn btn-secondary"
           commandfor="mass-import-dialog"
           command="close"
@@ -942,6 +979,72 @@
         </button>
       </div>
     </form>
+  </dialog>
+
+
+  <!-- Manage & Undo Uploaded Repositories Modal Dialog (Admin Only) -->
+  <dialog id="manage-repos-dialog" class="modal-dialog manage-repos-modal" closedby="any" aria-labelledby="manage-repos-title">
+    <div class="modal-header">
+      <div class="modal-header-text">
+        <h2 id="manage-repos-title">↩️ Undo Repo Uploads</h2>
+        <span class="badge" id="repos-count-badge">0 Repositories</span>
+      </div>
+      <button
+        type="button"
+        class="icon-btn"
+        commandfor="manage-repos-dialog"
+        command="close"
+        aria-label="Close dialog"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="manage-repos-intro">
+        <p class="hint" style="margin-bottom: 1rem;">
+          View repositories imported into your library. Clicking <strong>Undo / Remove</strong> will delete all games from that repository in one click.
+        </p>
+      </div>
+
+      <!-- Quick Undo Most Recent Batch Banner -->
+      <div id="quick-undo-batch-banner" class="quick-undo-banner" hidden>
+        <div class="quick-undo-info">
+          <strong style="color: #fca5a5;">Recent Import Session</strong>
+          <span id="quick-undo-batch-label" class="hint" style="margin: 0;">0 games imported</span>
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" id="quick-undo-batch-btn">
+          ↩️ Undo Recent Session
+        </button>
+      </div>
+
+      <div id="repos-list-container" class="repos-list-container"></div>
+
+      <div id="repos-empty-state" class="empty-state" style="padding: 2.5rem 1rem;" hidden>
+        <div class="empty-icon-wrap" style="width: 56px; height: 56px;" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+          </svg>
+        </div>
+        <h3>No imported repositories</h3>
+        <p class="hint">Repositories imported via Mass GitHub Import will appear here so you can undo or remove them at any time.</p>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button
+        type="button"
+        class="btn btn-secondary"
+        commandfor="manage-repos-dialog"
+        command="close"
+      >
+        Close
+      </button>
+    </div>
   </dialog>
 
   <script src="/app.js" defer></script>
