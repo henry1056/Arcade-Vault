@@ -105,6 +105,79 @@
     }
   });
 
+  // Procedural SVG Game Cover Generator for games without icons or broken images
+  function generateGameCoverSvg(title, category = 'Arcade') {
+    const safeTitle = (title || 'Game').trim();
+    const safeCat = (category || 'Arcade').trim().toUpperCase();
+
+    const colorPalettes = {
+      Action: { from: '#f97316', to: '#dc2626', glow: '#fb923c' },
+      Arcade: { from: '#8b5cf6', to: '#ec4899', glow: '#a855f7' },
+      Adventure: { from: '#10b981', to: '#059669', glow: '#34d399' },
+      Puzzle: { from: '#06b6d4', to: '#3b82f6', glow: '#38bdf8' },
+      Retro: { from: '#d946ef', to: '#7c3aed', glow: '#e879f9' },
+      Shooter: { from: '#ef4444', to: '#b91c1c', glow: '#f87171' },
+      Strategy: { from: '#6366f1', to: '#4338ca', glow: '#818cf8' },
+      Sports: { from: '#22c55e', to: '#15803d', glow: '#4ade80' },
+      Racing: { from: '#eab308', to: '#d97706', glow: '#fde047' },
+      Other: { from: '#64748b', to: '#334155', glow: '#94a3b8' }
+    };
+
+    const matchedPalette = colorPalettes[category] || colorPalettes.Arcade;
+
+    const escapedTitle = safeTitle
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+
+    const displayTitle = escapedTitle.length > 24 ? escapedTitle.slice(0, 22) + '...' : escapedTitle;
+
+    const svg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360">',
+      '  <defs>',
+      '    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">',
+      '      <stop offset="0%" stop-color="#090d16" />',
+      '      <stop offset="100%" stop-color="#141a2c" />',
+      '    </linearGradient>',
+      '    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">',
+      '      <stop offset="0%" stop-color="' + matchedPalette.from + '" />',
+      '      <stop offset="100%" stop-color="' + matchedPalette.to + '" />',
+      '    </linearGradient>',
+      '    <radialGradient id="glowGrad" cx="50%" cy="45%" r="50%">',
+      '      <stop offset="0%" stop-color="' + matchedPalette.glow + '" stop-opacity="0.35" />',
+      '      <stop offset="100%" stop-color="' + matchedPalette.glow + '" stop-opacity="0" />',
+      '    </radialGradient>',
+      '  </defs>',
+      '  <rect width="640" height="360" fill="url(#bgGrad)" />',
+      '  <circle cx="320" cy="145" r="180" fill="url(#glowGrad)" />',
+      '  <g stroke="rgba(255,255,255,0.05)" stroke-width="1">',
+      '    <line x1="0" y1="72" x2="640" y2="72" />',
+      '    <line x1="0" y1="144" x2="640" y2="144" />',
+      '    <line x1="0" y1="216" x2="640" y2="216" />',
+      '    <line x1="0" y1="288" x2="640" y2="288" />',
+      '    <line x1="128" y1="0" x2="128" y2="360" />',
+      '    <line x1="256" y1="0" x2="256" y2="360" />',
+      '    <line x1="384" y1="0" x2="384" y2="360" />',
+      '    <line x1="512" y1="0" x2="512" y2="360" />',
+      '  </g>',
+      '  <g transform="translate(320, 125) scale(1.15)">',
+      '    <rect x="-54" y="-32" width="108" height="64" rx="16" fill="url(#accentGrad)" opacity="0.25" stroke="' + matchedPalette.from + '" stroke-width="2" />',
+      '    <path d="M-28 -6 L-28 6 M-34 0 L-22 0" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />',
+      '    <circle cx="24" cy="-4" r="4.5" fill="#ffffff" />',
+      '    <circle cx="14" cy="6" r="4.5" fill="#ffffff" opacity="0.8" />',
+      '  </g>',
+      '  <rect x="230" y="210" width="180" height="26" rx="13" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.18)" stroke-width="1" />',
+      '  <text x="320" y="227" fill="#ffffff" font-size="11" font-family="system-ui, -apple-system, sans-serif" font-weight="700" letter-spacing="1.5" text-anchor="middle">' + safeCat + '</text>',
+      '  <text x="320" y="280" fill="#ffffff" font-size="24" font-family="system-ui, -apple-system, sans-serif" font-weight="800" text-anchor="middle">' + displayTitle + '</text>',
+      '  <text x="320" y="308" fill="#94a3b8" font-size="12" font-family="system-ui, -apple-system, sans-serif" font-weight="500" text-anchor="middle">ARCADE VAULT • PLAY NOW</text>',
+      '</svg>'
+    ].join('\n');
+
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
   // Client-side IndexedDB Storage (Enables offline / Cloudflare Pages static hosting support)
   const DB_NAME = 'ArcadeVaultDB';
   const DB_STORE = 'games';
@@ -261,6 +334,31 @@
   const saveEditGameBtn = document.getElementById('save-edit-game-btn');
   const editGamePlayerBtn = document.getElementById('edit-game-player-btn');
 
+  // DOM Elements - Views (Catalog vs Dedicated Game Page)
+  const catalogView = document.getElementById('catalog-view');
+  const gamePageView = document.getElementById('game-page-view');
+  const gamePageBackBtn = document.getElementById('game-page-back-btn');
+  const gamePageCrumbCategory = document.getElementById('game-page-crumb-category');
+  const gamePageCrumbTitle = document.getElementById('game-page-crumb-title');
+  const gamePageReloadBtn = document.getElementById('game-page-reload-btn');
+  const gamePageFullscreenBtn = document.getElementById('game-page-fullscreen-btn');
+  const gamePageNewtabLink = document.getElementById('game-page-newtab-link');
+  const gamePageShareBtn = document.getElementById('game-page-share-btn');
+  const gamePageEditBtn = document.getElementById('game-page-edit-btn');
+  const gamePageDeleteBtn = document.getElementById('game-page-delete-btn');
+  const gamePageStageWrap = document.getElementById('game-page-stage-wrap');
+  const gamePageIframe = document.getElementById('game-page-iframe');
+  const gamePageLoader = document.getElementById('game-page-loader');
+  const gamePageTroubleshootLink = document.getElementById('game-page-troubleshoot-link');
+  const gamePageCoverImg = document.getElementById('game-page-cover-img');
+  const gamePageTitle = document.getElementById('game-page-title');
+  const gamePageCategoryBadge = document.getElementById('game-page-category-badge');
+  const gamePageSourceBadge = document.getElementById('game-page-source-badge');
+  const gamePageAuthor = document.getElementById('game-page-author');
+  const gamePageDesc = document.getElementById('game-page-desc');
+  const gamePageRelatedGrid = document.getElementById('game-page-related-grid');
+
+
   UserInvalidFallback.init(uploadForm);
   UserInvalidFallback.init(adminLoginForm);
   if (massImportForm) UserInvalidFallback.init(massImportForm);
@@ -282,6 +380,8 @@
     if (emptyUploadBtn) emptyUploadBtn.hidden = !isAdmin;
     if (editGamePlayerBtn) editGamePlayerBtn.hidden = !isAdmin;
     deleteGameBtn.hidden = !isAdmin;
+    if (gamePageEditBtn) gamePageEditBtn.hidden = !isAdmin;
+    if (gamePageDeleteBtn) gamePageDeleteBtn.hidden = !isAdmin;
     footerAdminBtn.hidden = isAdmin;
 
     emptyStateDesc.textContent = isAdmin
@@ -484,31 +584,109 @@
     resetUploadWizardToStep1();
   });
 
-  // Client-side fallback icon search (for Cloudflare Pages static hosting)
-  async function clientIconSearch(gameTitle) {
+  
+  // Toast Notification System
+  function showToast(message) {
+    let toast = document.getElementById('vault-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'vault-toast';
+      toast.className = 'toast-notice';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add('visible');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.classList.remove('visible');
+    }, 2800);
+  }
+
+
+  // Robust fallback icon search (Wikipedia API, iTunes API, and procedural SVG covers)
+  async function clientIconSearch(gameTitle, category = 'Arcade') {
     const query = `${gameTitle} icon`;
     const results = [];
+    const seenUrls = new Set();
+
+    // 1. Try server search endpoint if available
     try {
-      const iRes = await fetch(
-        `https://itunes.apple.com/search?term=${encodeURIComponent(gameTitle)}&entity=software&limit=5`
-      );
-      if (iRes.ok) {
-        const data = await iRes.json();
+      const apiRes = await fetch(`/api/search-icons?q=${encodeURIComponent(query)}`);
+      if (apiRes.ok) {
+        const data = await apiRes.json();
         for (const item of data.results || []) {
-          const art = item.artworkUrl512 || item.artworkUrl100;
-          if (art) {
-            results.push({
-              url: art,
-              thumbnailUrl: art,
-              title: item.trackName || query
-            });
-            if (results.length >= 5) break;
+          const u = item.thumbnailUrl || item.url;
+          if (u && !seenUrls.has(u)) {
+            seenUrls.add(u);
+            results.push(item);
           }
         }
       }
     } catch {
-      // Ignore
+      // Backend not running / static hosting
     }
+
+    // 2. Wikipedia Commons API (CORS origin=*)
+    if (results.length < 5) {
+      try {
+        const wikiRes = await fetch(
+          `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(gameTitle + ' video game')}&gsrlimit=6&prop=pageimages&pithumbsize=500&format=json&origin=*`
+        );
+        if (wikiRes.ok) {
+          const wikiData = await wikiRes.json();
+          const pages = wikiData?.query?.pages ? Object.values(wikiData.query.pages) : [];
+          for (const page of pages) {
+            const thumb = page?.thumbnail?.source;
+            if (thumb && !seenUrls.has(thumb)) {
+              seenUrls.add(thumb);
+              results.push({
+                url: thumb,
+                thumbnailUrl: thumb,
+                title: page.title || gameTitle
+              });
+              if (results.length >= 5) break;
+            }
+          }
+        }
+      } catch {
+        // Wikipedia search failed
+      }
+    }
+
+    // 3. Apple iTunes Software search
+    if (results.length < 5) {
+      try {
+        const iRes = await fetch(
+          `https://itunes.apple.com/search?term=${encodeURIComponent(gameTitle)}&entity=software&limit=5`
+        );
+        if (iRes.ok) {
+          const data = await iRes.json();
+          for (const item of data.results || []) {
+            const art = item.artworkUrl512 || item.artworkUrl100;
+            if (art && !seenUrls.has(art)) {
+              seenUrls.add(art);
+              results.push({
+                url: art,
+                thumbnailUrl: art,
+                title: item.trackName || query
+              });
+              if (results.length >= 5) break;
+            }
+          }
+        }
+      } catch {
+        // iTunes error ignored
+      }
+    }
+
+    // 4. Always provide an artistic generated cover option
+    const genCover = generateGameCoverSvg(gameTitle, category);
+    results.push({
+      url: genCover,
+      thumbnailUrl: genCover,
+      title: `${gameTitle} (Procedural Cover)`
+    });
+
     return { query, results: results.slice(0, 5) };
   }
 
@@ -607,10 +785,16 @@
     const gameFile = formData.get('gameFile');
 
     let playUrl = '';
+    let htmlContent = null;
     if (sourceType === 'url') {
       playUrl = gameUrl;
     } else if (gameFile && gameFile instanceof File) {
       playUrl = URL.createObjectURL(gameFile);
+      if (gameFile.name.endsWith('.html') || gameFile.name.endsWith('.htm') || gameFile.type === 'text/html') {
+        try {
+          htmlContent = await gameFile.text();
+        } catch {}
+      }
     }
 
     const newGame = {
@@ -621,6 +805,7 @@
       description: description || 'No description provided.',
       sourceType,
       playUrl,
+      htmlContent,
       coverUrl: null,
       createdAt: new Date().toISOString()
     };
@@ -720,10 +905,16 @@
 
   // Step 2: Skip Icon Selection
   skipIconBtn.addEventListener('click', () => {
-    const gameToLaunch = pendingIconGame;
-    uploadDialog.close();
-    if (gameToLaunch) {
-      openGamePlayer(gameToLaunch);
+    if (pendingIconGame) {
+      if (!pendingIconGame.coverUrl) {
+        pendingIconGame.coverUrl = generateGameCoverSvg(pendingIconGame.title, pendingIconGame.category);
+        const idx = allGames.findIndex(g => g.id === pendingIconGame.id);
+        if (idx !== -1) allGames[idx] = pendingIconGame;
+        idbSaveGame(pendingIconGame);
+        renderGames();
+      }
+      uploadDialog.close();
+      resetUploadWizardToStep1();
     }
   });
 
@@ -1292,9 +1483,11 @@
           coverUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(resolvedBranch)}/${cleanCover}`;
         }
 
+        const category = inferCategoryFromTitle(title, defaultCategory);
+
         if (autoPickFirstIcon) {
           massStatusLabel.textContent = `[${gIdx + 1}/${detectedGames.length}] Fetching icon for "${title}"...`;
-          const iconData = await clientIconSearch(title);
+          const iconData = await clientIconSearch(title, category);
           if (iconData?.results?.length > 0) {
             coverUrl = iconData.results[0].thumbnailUrl || iconData.results[0].url;
             appendMassConsole(`[${gIdx + 1}/${detectedGames.length}] Applied 1st icon result for "${title}"`, 'info');
@@ -1305,7 +1498,9 @@
           coverUrl = findRepoIconForGame(treeData.files, gameItem.gameDir, owner, repo, resolvedBranch);
         }
 
-        const category = inferCategoryFromTitle(title, defaultCategory);
+        if (!coverUrl) {
+          coverUrl = generateGameCoverSvg(title, category);
+        }
 
         const newGame = {
           id: crypto.randomUUID(),
@@ -1564,6 +1759,9 @@
         if (playerDialog.open && currentPlayingGame?.id === game.id) {
           playerDialog.close();
         }
+        if (currentPlayingGame?.id === game.id) {
+          showCatalogView();
+        }
         renderGames();
         return;
       }
@@ -1577,10 +1775,121 @@
     if (playerDialog.open && currentPlayingGame?.id === game.id) {
       playerDialog.close();
     }
+    if (currentPlayingGame?.id === game.id) {
+      showCatalogView();
+    }
     renderGames();
   }
 
-  // Render Game Cards
+  // Helper to create a game card element (used in catalog grid & related games)
+  function createGameCard(game) {
+    const article = document.createElement('article');
+    article.className = 'game-card';
+    article.tabIndex = 0;
+    article.setAttribute('role', 'button');
+    article.setAttribute('aria-label', `Play ${game.title}`);
+
+    // Clicking anywhere on card navigates to dedicated game page
+    article.addEventListener('click', (e) => {
+      if (e.target.closest('button, a')) return;
+      showGamePageView(game);
+    });
+
+    article.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        if (e.target.closest('button, a')) return;
+        e.preventDefault();
+        showGamePageView(game);
+      }
+    });
+
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'card-thumb-wrap';
+
+    const fallbackCover = generateGameCoverSvg(game.title, game.category);
+    const img = document.createElement('img');
+    img.src = game.coverUrl || fallbackCover;
+    img.alt = `${game.title} cover`;
+    img.width = 640;
+    img.height = 360;
+    img.loading = 'lazy';
+    img.onerror = () => {
+      img.onerror = null;
+      img.src = fallbackCover;
+    };
+    thumbWrap.appendChild(img);
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    const topMeta = document.createElement('div');
+    topMeta.className = 'card-top-meta';
+
+    const catBadge = document.createElement('span');
+    catBadge.className = 'badge';
+    catBadge.textContent = game.category || 'Arcade';
+
+    const sourceTag = document.createElement('span');
+    sourceTag.className = 'card-source-tag';
+    sourceTag.textContent = game.sourceType === 'url' ? 'External URL' : 'Hosted Web Build';
+
+    topMeta.append(catBadge, sourceTag);
+
+    const h3 = document.createElement('h3');
+    h3.className = 'card-title';
+    h3.textContent = game.title;
+
+    const authorP = document.createElement('p');
+    authorP.className = 'card-author';
+    authorP.textContent = `By ${game.author || 'Indie Creator'}`;
+
+    const descP = document.createElement('p');
+    descP.className = 'card-desc';
+    descP.textContent = game.description || 'Click Play Now to launch this web game in your browser.';
+
+    const actions = document.createElement('div');
+    actions.className = 'card-actions';
+
+    const playBtn = document.createElement('button');
+    playBtn.type = 'button';
+    playBtn.className = 'btn btn-primary btn-sm btn-play';
+    playBtn.textContent = '▶ Play Now';
+    playBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showGamePageView(game);
+    });
+
+    actions.appendChild(playBtn);
+
+    if (isAdmin) {
+      const cardEditBtn = document.createElement('button');
+      cardEditBtn.type = 'button';
+      cardEditBtn.className = 'btn btn-secondary btn-sm';
+      cardEditBtn.textContent = '✏️ Edit';
+      cardEditBtn.title = 'Edit game details';
+      cardEditBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEditGameModal(game);
+      });
+      actions.appendChild(cardEditBtn);
+
+      const cardDelBtn = document.createElement('button');
+      cardDelBtn.type = 'button';
+      cardDelBtn.className = 'btn btn-danger btn-sm';
+      cardDelBtn.textContent = 'Delete';
+      cardDelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteGameById(game);
+      });
+      actions.appendChild(cardDelBtn);
+    }
+
+    body.append(topMeta, h3, authorP, descP, actions);
+    article.append(thumbWrap, body);
+    return article;
+  }
+
+  // Render Game Cards in Catalog
   function renderGames() {
     const query = searchInput.value.trim().toLowerCase();
     const filtered = allGames.filter((game) => {
@@ -1605,113 +1914,225 @@
     emptyState.hidden = true;
 
     filtered.forEach((game) => {
-      const article = document.createElement('article');
-      article.className = 'game-card';
-
-      const thumbWrap = document.createElement('div');
-      thumbWrap.className = 'card-thumb-wrap';
-
-      if (game.coverUrl) {
-        const img = document.createElement('img');
-        img.src = game.coverUrl;
-        img.alt = `${game.title} icon`;
-        img.width = 640;
-        img.height = 360;
-        img.loading = 'lazy';
-        thumbWrap.appendChild(img);
-      } else {
-        const fallback = document.createElement('div');
-        fallback.className = 'card-fallback-art';
-        fallback.setAttribute('aria-hidden', 'true');
-        fallback.textContent = game.title;
-        thumbWrap.appendChild(fallback);
-      }
-
-      const body = document.createElement('div');
-      body.className = 'card-body';
-
-      const topMeta = document.createElement('div');
-      topMeta.className = 'card-top-meta';
-
-      const catBadge = document.createElement('span');
-      catBadge.className = 'badge';
-      catBadge.textContent = game.category || 'Arcade';
-
-      const sourceTag = document.createElement('span');
-      sourceTag.className = 'card-source-tag';
-      sourceTag.textContent = game.sourceType === 'url' ? 'External URL' : 'Hosted Web Build';
-
-      topMeta.append(catBadge, sourceTag);
-
-      const h3 = document.createElement('h3');
-      h3.className = 'card-title';
-      h3.textContent = game.title;
-
-      const authorP = document.createElement('p');
-      authorP.className = 'card-author';
-      authorP.textContent = `By ${game.author || 'Indie Creator'}`;
-
-      const descP = document.createElement('p');
-      descP.className = 'card-desc';
-      descP.textContent = game.description || 'Click Play Now to launch this web game in your browser.';
-
-      const actions = document.createElement('div');
-      actions.className = 'card-actions';
-
-      const playBtn = document.createElement('button');
-      playBtn.type = 'button';
-      playBtn.className = 'btn btn-primary btn-sm btn-play';
-      playBtn.textContent = '▶ Play Now';
-      playBtn.addEventListener('click', () => openGamePlayer(game));
-
-      actions.appendChild(playBtn);
-
-      if (isAdmin) {
-        const cardEditBtn = document.createElement('button');
-        cardEditBtn.type = 'button';
-        cardEditBtn.className = 'btn btn-secondary btn-sm';
-        cardEditBtn.textContent = '✏️ Edit';
-        cardEditBtn.title = 'Edit game details';
-        cardEditBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openEditGameModal(game);
-        });
-        actions.appendChild(cardEditBtn);
-
-        const cardDelBtn = document.createElement('button');
-        cardDelBtn.type = 'button';
-        cardDelBtn.className = 'btn btn-danger btn-sm';
-        cardDelBtn.textContent = 'Delete';
-        cardDelBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          deleteGameById(game);
-        });
-        actions.appendChild(cardDelBtn);
-      }
-
-      body.append(topMeta, h3, authorP, descP, actions);
-      article.append(thumbWrap, body);
-      gamesGrid.appendChild(article);
+      gamesGrid.appendChild(createGameCard(game));
     });
   }
 
-  // Open Game Player Modal
-  function openGamePlayer(game) {
+  // Dedicated Game Page Navigation & View Controller
+  function showGamePageView(game, pushHistory = true) {
+    if (!game) return;
     currentPlayingGame = game;
-    playerTitle.textContent = game.title;
-    playerCategory.textContent = game.category || 'Arcade';
-    playerAuthor.textContent = `By ${game.author || 'Indie Creator'}`;
-    playerDesc.textContent = game.description || '';
-    openNewTabLink.href = game.playUrl;
-    if (editGamePlayerBtn) editGamePlayerBtn.hidden = !isAdmin;
-    deleteGameBtn.hidden = !isAdmin;
-    gameIframe.src = game.playUrl;
-    playerDialog.showModal();
+
+    if (catalogView) catalogView.hidden = true;
+    if (gamePageView) gamePageView.hidden = false;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Breadcrumbs
+    if (gamePageCrumbCategory) gamePageCrumbCategory.textContent = game.category || 'Arcade';
+    if (gamePageCrumbTitle) gamePageCrumbTitle.textContent = game.title;
+
+    // Toolbar buttons
+    if (gamePageNewtabLink) gamePageNewtabLink.href = game.playUrl || '#';
+    if (gamePageTroubleshootLink) gamePageTroubleshootLink.href = game.playUrl || '#';
+    if (gamePageEditBtn) gamePageEditBtn.hidden = !isAdmin;
+    if (gamePageDeleteBtn) gamePageDeleteBtn.hidden = !isAdmin;
+
+    // Metadata & Cover
+    updateGamePageMetadata(game);
+
+    // Launch Game in Iframe
+    if (gamePageIframe) {
+      if (game.htmlContent) {
+        try {
+          const blob = new Blob([game.htmlContent], { type: 'text/html' });
+          gamePageIframe.src = URL.createObjectURL(blob);
+        } catch {
+          gamePageIframe.srcdoc = game.htmlContent;
+        }
+      } else {
+        gamePageIframe.src = game.playUrl || 'about:blank';
+      }
+    }
+
+    // Recommended / Related Games
+    renderGamePageRelated(game);
+
+    // URL & Document Title
+    document.title = `${game.title} - ArcadeVault`;
+    if (pushHistory) {
+      const url = new URL(window.location);
+      url.searchParams.set('game', game.id);
+      window.history.pushState({ gameId: game.id }, '', url.toString());
+    }
   }
+
+  // Update Game Page Metadata
+  function updateGamePageMetadata(game) {
+    if (gamePageTitle) gamePageTitle.textContent = game.title;
+    if (gamePageCategoryBadge) gamePageCategoryBadge.textContent = game.category || 'Arcade';
+    if (gamePageSourceBadge) gamePageSourceBadge.textContent = game.sourceType === 'url' ? 'External URL' : 'Hosted Web Build';
+    if (gamePageAuthor) gamePageAuthor.textContent = `By ${game.author || 'Indie Creator'}`;
+    if (gamePageDesc) gamePageDesc.textContent = game.description || 'No description provided.';
+    if (gamePageCrumbTitle) gamePageCrumbTitle.textContent = game.title;
+    if (gamePageCrumbCategory) gamePageCrumbCategory.textContent = game.category || 'Arcade';
+
+    if (gamePageCoverImg) {
+      const fallback = generateGameCoverSvg(game.title, game.category);
+      gamePageCoverImg.src = game.coverUrl || fallback;
+      gamePageCoverImg.alt = `${game.title} cover`;
+      gamePageCoverImg.onerror = () => {
+        gamePageCoverImg.onerror = null;
+        gamePageCoverImg.src = fallback;
+      };
+    }
+  }
+
+  // Switch back to Catalog View
+  function showCatalogView(pushHistory = true) {
+    currentPlayingGame = null;
+    if (gamePageIframe) gamePageIframe.src = 'about:blank';
+    if (gamePageView) gamePageView.hidden = true;
+    if (catalogView) catalogView.hidden = false;
+    document.title = 'ArcadeVault - Free Web Games & Indie Arcade';
+
+    if (pushHistory) {
+      const url = new URL(window.location);
+      url.searchParams.delete('game');
+      window.history.pushState({}, '', url.pathname + (url.search ? url.search : ''));
+    }
+  }
+
+  // Render Related Games Section on Game Page
+  function renderGamePageRelated(currentGame) {
+    if (!gamePageRelatedGrid) return;
+    gamePageRelatedGrid.innerHTML = '';
+
+    const candidates = allGames.filter((g) => g.id !== currentGame.id);
+    const sameCat = candidates.filter((g) => g.category === currentGame.category);
+    const otherCat = candidates.filter((g) => g.category !== currentGame.category);
+    const related = [...sameCat, ...otherCat].slice(0, 4);
+
+    if (related.length === 0) {
+      const note = document.createElement('p');
+      note.className = 'hint';
+      note.style.gridColumn = '1 / -1';
+      note.textContent = 'No other games currently available in the vault.';
+      gamePageRelatedGrid.appendChild(note);
+      return;
+    }
+
+    related.forEach((game) => {
+      gamePageRelatedGrid.appendChild(createGameCard(game));
+    });
+  }
+
+  // Backward compatibility alias for modal player
+  function openGamePlayer(game) {
+    showGamePageView(game);
+  }
+
+  // Wire Game Page toolbar actions
+  if (gamePageBackBtn) {
+    gamePageBackBtn.addEventListener('click', () => {
+      showCatalogView();
+    });
+  }
+
+  const brandLink = document.querySelector('.brand');
+  if (brandLink) {
+    brandLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      showCatalogView();
+    });
+  }
+
+  if (gamePageReloadBtn) {
+    gamePageReloadBtn.addEventListener('click', () => {
+      if (currentPlayingGame && gamePageIframe) {
+        if (currentPlayingGame.htmlContent) {
+          try {
+            const blob = new Blob([currentPlayingGame.htmlContent], { type: 'text/html' });
+            gamePageIframe.src = URL.createObjectURL(blob);
+          } catch {
+            gamePageIframe.srcdoc = currentPlayingGame.htmlContent;
+          }
+        } else {
+          gamePageIframe.src = currentPlayingGame.playUrl || 'about:blank';
+        }
+      }
+    });
+  }
+
+  if (gamePageFullscreenBtn) {
+    gamePageFullscreenBtn.addEventListener('click', () => {
+      const stage = gamePageStageWrap || playerStage;
+      if (!stage) return;
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else if (stage.requestFullscreen) {
+        stage.requestFullscreen().catch(() => {});
+      } else if (stage.webkitRequestFullscreen) {
+        stage.webkitRequestFullscreen();
+      }
+    });
+  }
+
+  if (gamePageShareBtn) {
+    gamePageShareBtn.addEventListener('click', async () => {
+      if (!currentPlayingGame) return;
+      const shareUrl = `${window.location.origin}${window.location.pathname}?game=${encodeURIComponent(currentPlayingGame.id)}`;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(shareUrl);
+        } else {
+          const temp = document.createElement('input');
+          temp.value = shareUrl;
+          document.body.appendChild(temp);
+          temp.select();
+          document.execCommand('copy');
+          document.body.removeChild(temp);
+        }
+        showToast('📋 Game link copied to clipboard!');
+      } catch {
+        showToast('Game URL: ' + shareUrl);
+      }
+    });
+  }
+
+  if (gamePageEditBtn) {
+    gamePageEditBtn.addEventListener('click', () => {
+      if (currentPlayingGame) {
+        openEditGameModal(currentPlayingGame);
+      }
+    });
+  }
+
+  if (gamePageDeleteBtn) {
+    gamePageDeleteBtn.addEventListener('click', () => {
+      if (currentPlayingGame) {
+        deleteGameById(currentPlayingGame);
+      }
+    });
+  }
+
+  // Listen to browser Back / Forward buttons
+  window.addEventListener('popstate', (e) => {
+    const params = new URLSearchParams(window.location.search);
+    const gameId = e.state?.gameId || params.get('game');
+    if (gameId) {
+      const found = allGames.find((g) => g.id === gameId);
+      if (found) {
+        showGamePageView(found, false);
+      } else {
+        showCatalogView(false);
+      }
+    } else {
+      showCatalogView(false);
+    }
+  });
 
   playerDialog.addEventListener('close', () => {
     gameIframe.src = 'about:blank';
-    currentPlayingGame = null;
   });
 
   reloadGameBtn.addEventListener('click', () => {
@@ -1731,6 +2152,7 @@
       deleteGameById(currentPlayingGame);
     }
   });
+
 
   // ==========================================
   // Edit Game Modal Handlers
@@ -1998,6 +2420,17 @@
     });
   }
 
+  function checkInitialGameRoute() {
+    const params = new URLSearchParams(window.location.search);
+    const gameId = params.get('game');
+    if (gameId && allGames.length > 0) {
+      const found = allGames.find((g) => g.id === gameId || g.title.toLowerCase() === gameId.toLowerCase());
+      if (found) {
+        showGamePageView(found, false);
+      }
+    }
+  }
+
   // Load initial games from server or IndexedDB
   async function fetchGames() {
     try {
@@ -2005,6 +2438,7 @@
       if (res.ok) {
         allGames = await res.json();
         renderGames();
+        checkInitialGameRoute();
         return;
       }
     } catch {
@@ -2015,6 +2449,7 @@
     const idbGames = await idbGetGames();
     allGames = idbGames;
     renderGames();
+    checkInitialGameRoute();
   }
 
   checkAdminSession();
