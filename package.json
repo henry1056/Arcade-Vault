@@ -4,7 +4,8 @@
   "description": "Web game portal with HTML5 & ZIP game upload and instant browser play",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "node -e \"console.log('ArcadeVault build ready in public/')\""
   },
   "dependencies": {
     "adm-zip": "^0.5.16",

@@ -54,6 +54,25 @@ All Rights Reserved.
 
 ---
 
+## ☁️ Deploying to Cloudflare Pages (Free `*.pages.dev` URL)
+
+You can deploy ArcadeVault directly to Cloudflare Pages connected to your GitHub repository:
+
+1. Log into your **[Cloudflare Dashboard](https://dash.cloudflare.com/)**.
+2. Navigate to **Compute (Workers & Pages)** > **Create Application** > **Pages** > **Connect to Git**.
+3. Select your GitHub repository: `henry1056/arcade-vault`.
+4. Configure the build settings:
+   - **Project name**: `arcade-vault` (or your preferred name)
+   - **Production branch**: `main`
+   - **Framework preset**: `None`
+   - **Build command**: `npm run build` *(or leave blank)*
+   - **Build output directory**: `public`
+5. Click **Save and Deploy**.
+
+Cloudflare will deploy your site and provide a live URL like `https://arcade-vault.pages.dev`!
+
+---
+
 ## 📁 Project Structure
 
 ```
