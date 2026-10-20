@@ -11,15 +11,33 @@ const DEFAULT_PORT = Number(process.env.PORT) || 3080;
 // Admin credentials (override via ADMIN_USER and ADMIN_PASS environment variables)
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
-const activeAdminSessions = new Set();
 
 const ROOT_DIR = __dirname;
 const DATA_DIR = path.join(ROOT_DIR, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'games.json');
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const UPLOADS_DIR = path.join(ROOT_DIR, 'uploads');
 const GAMES_DIR = path.join(UPLOADS_DIR, 'games');
 const COVERS_DIR = path.join(UPLOADS_DIR, 'covers');
 const TMP_DIR = path.join(UPLOADS_DIR, 'tmp');
+
+function readSessions() {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const arr = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
+      return new Set(Array.isArray(arr) ? arr : []);
+    }
+  } catch {}
+  return new Set();
+}
+
+function writeSessions(set) {
+  try {
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(Array.from(set), null, 2), 'utf8');
+  } catch {}
+}
+
+const activeAdminSessions = readSessions();
 
 // Ensure required directories and data file exist
 [DATA_DIR, UPLOADS_DIR, GAMES_DIR, COVERS_DIR, TMP_DIR].forEach((dir) => {
@@ -91,6 +109,7 @@ app.post('/api/admin/login', (req, res) => {
   if (safeEqual(username.trim(), ADMIN_USER) && safeEqual(password, ADMIN_PASS)) {
     const token = crypto.randomBytes(32).toString('hex');
     activeAdminSessions.add(token);
+    writeSessions(activeAdminSessions);
     res.setHeader(
       'Set-Cookie',
       `admin_session=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=86400`
@@ -105,6 +124,7 @@ app.post('/api/admin/logout', (req, res) => {
   const cookies = parseCookies(req);
   if (cookies.admin_session) {
     activeAdminSessions.delete(cookies.admin_session);
+    writeSessions(activeAdminSessions);
   }
   res.setHeader('Set-Cookie', 'admin_session=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0');
   return res.json({ authenticated: false });
