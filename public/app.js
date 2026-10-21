@@ -127,7 +127,8 @@
       Other: { from: '#64748b', to: '#334155', glow: '#94a3b8' }
     };
 
-    const matchedPalette = colorPalettes[category] || colorPalettes.Arcade;
+    const matchedKey = Object.keys(colorPalettes).find((k) => k.toLowerCase() === (category || '').trim().toLowerCase());
+    const matchedPalette = matchedKey ? colorPalettes[matchedKey] : colorPalettes.Arcade;
 
     const escapedTitle = safeTitle
       .replace(/&/g, '&amp;')
@@ -221,6 +222,8 @@
       // Ignore storage errors
     }
   }
+
+  const idbPutGame = idbSaveGame;
 
   async function idbDeleteGame(id) {
     try {
@@ -447,7 +450,416 @@
   if (massImportForm) UserInvalidFallback.init(massImportForm);
   if (editGameForm) UserInvalidFallback.init(editGameForm);
 
-  let allGames = [];
+  const DEFAULT_GAMES = [
+  {
+    "id": "game-iron-snout",
+    "title": "Iron Snout",
+    "category": "Fighting",
+    "author": "SnoutUp Games",
+    "description": "Fast, snappy, and hilarious button-mashing pig fighting game. Defend yourself against endless waves of axe-wielding and chainsaw-wielding wolves using martial arts moves.",
+    "sourceType": "url",
+    "sourceRepo": "snoutup/iron-snout",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://snoutup.itch.io/iron-snout",
+    "coverUrl": "https://img.itch.zone/aW1nLzU2OTg4NC5wbmc=/315x250%23c/eQc87c.png",
+    "createdAt": "2026-10-20T23:55:00.000Z"
+  },
+  {
+    "id": "game-stickman-fighter",
+    "title": "Stickman Fighter",
+    "category": "Fighting",
+    "author": "Playtouch",
+    "description": "Martial arts arcade fighting game. Time your strikes left and right to unleash epic combos and knock out waves of enemy stickmen.",
+    "sourceType": "url",
+    "sourceRepo": "playtouch/stickman-fighter",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://playtouch.itch.io/stickman-fighter-epic-battle",
+    "coverUrl": "https://ts4.mm.bing.net/th?id=OIP.kgeMWQ73I1hPP4xpbsSryAHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:54:00.000Z"
+  },
+  {
+    "id": "game-boxing-physics",
+    "title": "Boxing Physics",
+    "category": "Fighting",
+    "author": "CoolGames",
+    "description": "Ragdoll boxing physics fighter. Swing, dodge, and deliver wacky knockout punches in fast-paced arena battles.",
+    "sourceType": "url",
+    "sourceRepo": "coolgames/boxing-physics",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://html5.gamedistribution.com/b97dd1aa9fa9465da3a5ff792b00ffc7/",
+    "coverUrl": "https://ts2.mm.bing.net/th?id=OIP.fD1OOLTnhf-gvJeNzTE85gHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:53:00.000Z"
+  },
+  {
+    "id": "game-1v1-lol",
+    "title": "1v1.LOL",
+    "category": "Shooter",
+    "author": "JustPlay.LOL",
+    "description": "Competitive third-person tactical shooter and real-time building arena. Fight in 1v1 duels, box fights, and battle royale modes.",
+    "sourceType": "url",
+    "sourceRepo": "justplay/1v1-lol",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://1v1.lol",
+    "coverUrl": "https://tse4.mm.bing.net/th/id/OIP.WhA_sv6MbbzAQb372SIlfAHaEo?r=0&pid=Api",
+    "createdAt": "2026-10-20T23:52:00.000Z"
+  },
+  {
+    "id": "game-time-shooter",
+    "title": "Time Shooter 2",
+    "category": "Shooter",
+    "author": "GoGoMan",
+    "description": "Superhot-style first-person shooter where time only moves when you move. Plan each shot, dodge enemy bullets in slow motion, and neutralize crystal foes.",
+    "sourceType": "url",
+    "sourceRepo": "gogoman/time-shooter-2",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://html5.gamedistribution.com/5ca454ba78024ce5ba8573fc0be2c9eb/",
+    "coverUrl": "https://ts3.mm.bing.net/th?id=OIP.ZCV1rAFxi1z2DDsAoms_KwHaF8&pid=15.1",
+    "createdAt": "2026-10-20T23:51:00.000Z"
+  },
+  {
+    "id": "game-hexgl",
+    "title": "HexGL",
+    "category": "Racing",
+    "author": "Thibaut Despoulain",
+    "description": "High-speed futuristic WebGL racing game built with Three.js. Pilot high-velocity anti-gravity hovercrafts across winding tracks.",
+    "sourceType": "url",
+    "sourceRepo": "BKcore/HexGL",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://hexgl.bkcore.com/play/",
+    "coverUrl": "https://hexgl.bkcore.com/image/poster.png",
+    "createdAt": "2026-10-20T23:50:00.000Z"
+  },
+  {
+    "id": "game-slow-roads",
+    "title": "Slow Roads 3D",
+    "category": "Racing",
+    "author": "Anslo",
+    "description": "Stunning 3D procedural driving experience. Cruise endlessly through rolling hills, autumn forests, and moon landscapes with dynamic time-of-day.",
+    "sourceType": "url",
+    "sourceRepo": "anslo/slow-roads",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://slowroads.io",
+    "coverUrl": "https://ts1.mm.bing.net/th?id=OIP.zoBFA69SPFduVytG6bHxqgHaDz&pid=15.1",
+    "createdAt": "2026-10-20T23:49:00.000Z"
+  },
+  {
+    "id": "game-drift-boss",
+    "title": "Drift Boss",
+    "category": "Racing",
+    "author": "MarketJS",
+    "description": "Addictive one-button drifting game. Steer around tricky corners, avoid flying off edges, and collect coins to unlock new custom vehicles.",
+    "sourceType": "url",
+    "sourceRepo": "marketjs/drift-boss",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://drift-boss.com",
+    "coverUrl": "https://ts2.mm.bing.net/th?id=OIP.HxPLFL_Ax-be0GqV17MZMQHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:48:00.000Z"
+  },
+  {
+    "id": "game-slope",
+    "title": "Slope",
+    "category": "Action",
+    "author": "Rob Kay",
+    "description": "High-octane 3D endless runner where you steer a ball speeding down randomized neon slopes, dodging obstacles and navigating tricky turns at breakneck speeds.",
+    "sourceType": "url",
+    "sourceRepo": "robkay/slope",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://slope-game.github.io",
+    "coverUrl": "https://ts1.mm.bing.net/th?id=OIP.9H7dU2KIp1UymKFCgvHqtwHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:47:00.000Z"
+  },
+  {
+    "id": "game-run-3",
+    "title": "Run 3",
+    "category": "Action",
+    "author": "Player 03",
+    "description": "Defy gravity in space tunnels! Jump and rotate the entire cylindrical tunnel to run on walls and ceilings across hundreds of challenging galaxy levels.",
+    "sourceType": "url",
+    "sourceRepo": "player03/run-3",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://run3.io",
+    "coverUrl": "https://tse4.mm.bing.net/th/id/OIP.w1rUusSLUDwi0IJBnBmHGQAAAA?r=0&pid=Api",
+    "createdAt": "2026-10-20T23:46:00.000Z"
+  },
+  {
+    "id": "game-wbwwb",
+    "title": "We Become What We Behold",
+    "category": "Platformer",
+    "author": "Nicky Case!",
+    "description": "A thought-provoking 5-minute game about news cycles, vicious cycles, and infinite cycles. Capture moments with your camera to see how the crowd reacts.",
+    "sourceType": "url",
+    "sourceRepo": "ncase/wbwwb",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://ncase.me/wbwwb/",
+    "coverUrl": "https://img.itch.zone/aW1hZ2UvOTIxMTUvNDU0MDMxLnBuZw==/315x250%23c/cxthdQ.png",
+    "createdAt": "2026-10-20T23:45:00.000Z"
+  },
+  {
+    "id": "game-doodle-jump",
+    "title": "Doodle Jump",
+    "category": "Platformer",
+    "author": "Lima Sky",
+    "description": "The classic vertical platform jumper! Bounce upwards through graph paper, avoiding black holes, monsters, and broken platforms while using springs and jetpacks.",
+    "sourceType": "url",
+    "sourceRepo": "limasky/doodle-jump",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://doodle-jump.co",
+    "coverUrl": "https://ts1.mm.bing.net/th?id=OIP.QZ2gp87Ew_6prVU87LeQxwHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:44:00.000Z"
+  },
+  {
+    "id": "game-ovo",
+    "title": "OvO",
+    "category": "Platformer",
+    "author": "Dedra Games",
+    "description": "Fast-paced precision parkour platformer. Chain slides, wall jumps, dives, and flips to beat levels in record times.",
+    "sourceType": "url",
+    "sourceRepo": "dedragames/ovo",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://dedragames.com/games/ovo/",
+    "coverUrl": "https://ts2.mm.bing.net/th?id=OIP.Vn9844_myLgUwM3rDaddFwHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:43:00.000Z"
+  },
+  {
+    "id": "game-2048",
+    "title": "2048",
+    "category": "Puzzle",
+    "author": "Gabriele Cirulli",
+    "description": "The legendary number puzzle. Slide tiles with arrow keys to merge matching numbers and reach the elusive 2048 tile.",
+    "sourceType": "url",
+    "sourceRepo": "gabrielecirulli/2048",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://play2048.co",
+    "coverUrl": "https://tse4.mm.bing.net/th/id/OIP.w0_kw2xM6TS6POjwTbehEgHaHa?r=0&pid=Api",
+    "createdAt": "2026-10-20T23:42:00.000Z"
+  },
+  {
+    "id": "game-tetris",
+    "title": "Tetris Classic",
+    "category": "Puzzle",
+    "author": "Alexey Pajitnov",
+    "description": "The timeless geometric block-clearing arcade game. Rotate, slide, and drop falling tetrominoes to clear full horizontal lines.",
+    "sourceType": "url",
+    "sourceRepo": "chvin/react-tetris",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://chvin.github.io/react-tetris/",
+    "coverUrl": "https://static.vecteezy.com/system/resources/previews/025/729/260/original/tetris-icon-in-illustration-vector.jpg",
+    "createdAt": "2026-10-20T23:41:00.000Z"
+  },
+  {
+    "id": "game-retro-bowl",
+    "title": "Retro Bowl",
+    "category": "Sports",
+    "author": "New Star Games",
+    "description": "Charming 8-bit American football simulation. Manage your NFL roster, call plays, throw touchdown passes, and lead your franchise to glory.",
+    "sourceType": "url",
+    "sourceRepo": "newstargames/retro-bowl",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://retro-bowl.github.io",
+    "coverUrl": "https://ts4.mm.bing.net/th?id=OIP.YGWYzPd3McV7EdzVhzxsSAHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:40:00.000Z"
+  },
+  {
+    "id": "game-basketball-stars",
+    "title": "Basketball Stars",
+    "category": "Sports",
+    "author": "Madpuffers",
+    "description": "Fast 1v1 and 2v2 cartoon basketball action with alley-oops, slam dunks, steals, and super shots.",
+    "sourceType": "url",
+    "sourceRepo": "madpuffers/basketball-stars",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://html5.gamedistribution.com/69d7084b71d949fe92518e38d9f1e145/",
+    "coverUrl": "https://ts1.mm.bing.net/th?id=OIP.wpxLCgcbofTKzJUde907HQHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:39:00.000Z"
+  },
+  {
+    "id": "game-pacman",
+    "title": "Pac-Man Canvas",
+    "category": "Retro",
+    "author": "Namco",
+    "description": "Classic arcade maze chase! Eat dots, avoid Blinky, Pinky, Inky, and Clyde, and grab Power Pellets to turn the tables on the ghosts.",
+    "sourceType": "url",
+    "sourceRepo": "namco/pacman",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://pacman-game.github.io",
+    "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/f0/93/4d/f0934dc4-e550-3eed-49d4-d55da3279311/AppIcon-0-0-1x_U007emarketing-0-8-0-85-220.png/512x512bb.jpg",
+    "createdAt": "2026-10-20T23:38:00.000Z"
+  },
+  {
+    "id": "game-flappy-bird",
+    "title": "Flappy Bird",
+    "category": "Retro",
+    "author": "Dong Nguyen",
+    "description": "The notorious tap-to-flap arcade obstacle avoider. Guide the bird safely through pairs of green pipes without touching anything.",
+    "sourceType": "url",
+    "sourceRepo": "dongnguyen/flappy-bird",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://flappybird.io",
+    "coverUrl": "https://upload.wikimedia.org/wikipedia/en/0/0a/Flappy_Bird_icon.png",
+    "createdAt": "2026-10-20T23:37:00.000Z"
+  },
+  {
+    "id": "game-fnaf-demake",
+    "title": "FNaF Web Demake",
+    "category": "Horror",
+    "author": "Scott Cawthon / Community",
+    "description": "Survive your night shift as the security guard at Freddy Fazbear's Pizza. Monitor camera feeds, conserve door power, and don't let animatronics in!",
+    "sourceType": "url",
+    "sourceRepo": "scottgames/fnaf",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://fnaf-game.github.io",
+    "coverUrl": "https://ts2.mm.bing.net/th?id=OIP.tASoS0DpcP48V3IdbMexwwHaHY&pid=15.1",
+    "createdAt": "2026-10-20T23:36:00.000Z"
+  },
+  {
+    "id": "game-cookie-clicker",
+    "title": "Cookie Clicker",
+    "category": "Idle",
+    "author": "Orteil & Opti",
+    "description": "The quintessential incremental game. Click a giant cookie, hire grandmas, build farms, unlock time machines, and bake billions of cookies.",
+    "sourceType": "url",
+    "sourceRepo": "dashnet/cookie-clicker",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://orteil.dashnet.org/cookieclicker/",
+    "coverUrl": "https://tse1.mm.bing.net/th/id/OIP.L7OAJII9jDIPxBsXOTglqwHaHa?r=0&pid=Api",
+    "createdAt": "2026-10-20T23:35:00.000Z"
+  },
+  {
+    "id": "game-bloons-td",
+    "title": "Bloons Tower Defense",
+    "category": "Strategy",
+    "author": "Ninja Kiwi",
+    "description": "Pop waves of multi-colored balloons with dart monkeys, tack shooters, bomb towers, and super monkeys before they reach the exit.",
+    "sourceType": "url",
+    "sourceRepo": "ninjakiwi/bloons-td",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://bloons-td.github.io",
+    "coverUrl": "https://cdn.iconscout.com/icon/premium/png-512-thumb/slope-6769199-5549123.png",
+    "createdAt": "2026-10-20T23:34:00.000Z"
+  },
+  {
+    "id": "game-master-chess",
+    "title": "Master Chess",
+    "category": "Strategy",
+    "author": "CodeThisLab",
+    "description": "Play classic chess against adaptive AI bots or a friend locally. Features 2D and 3D piece views, legal move hints, and timers.",
+    "sourceType": "url",
+    "sourceRepo": "codethislab/master-chess",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://html5.gamedistribution.com/5f8ef3425f1947b198a2eb8331da0bfa/",
+    "coverUrl": "https://ts4.mm.bing.net/th?id=OIP.SZFGORbWIKcxEUBDq8bF8wHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:33:00.000Z"
+  },
+  {
+    "id": "game-hero-knight",
+    "title": "Hero Knight Action RPG",
+    "category": "RPG",
+    "author": "PowerSlash Studios",
+    "description": "Pixel art side-scrolling action RPG. Defend your hometown against hordes of monsters, level up your warrior attributes, unlock legendary gear, and unleash devastating power slash attacks.",
+    "sourceType": "url",
+    "sourceRepo": "powerslash/hero-knight",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://html5.gamedistribution.com/268ffdb2c4a748f18d0c39c9d183b9ed/",
+    "coverUrl": "https://ts1.mm.bing.net/th?id=OIP.U71-a0p-zJg178eJ1fV49gHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:32:00.000Z"
+  },
+  {
+    "id": "game-up-hero",
+    "title": "Up Hero Action RPG",
+    "category": "RPG",
+    "author": "GameDistribution",
+    "description": "Action-packed arena RPG. Slay endless waves of dungeon monsters, collect rare gems and gold, upgrade your combat stats, and master swords and magic spells.",
+    "sourceType": "url",
+    "sourceRepo": "gamedistribution/up-hero",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://html5.gamedistribution.com/e545b983f4ad4284a220080dad9d9330/",
+    "coverUrl": "https://ts3.mm.bing.net/th?id=OIP.C0qC4a0e9zZ5hY5M7nQ38QHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:31:00.000Z"
+  },
+  {
+    "id": "game-ghost-escape",
+    "title": "Ghost Escape 3D",
+    "category": "Horror",
+    "author": "8B Games",
+    "description": "Suspenseful first-person 3D survival horror escape. Explore haunted hallways, find exit clues, and avoid the supernatural entity lurking in the shadows.",
+    "sourceType": "url",
+    "sourceRepo": "8bgames/ghost-escape-3d",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://html5.gamedistribution.com/a114410bad2b4601b933f165fafa30b4/",
+    "coverUrl": "https://ts2.mm.bing.net/th?id=OIP.6Z1q0w3y2a3b4c5d6e7f8gHaHa&pid=15.1",
+    "createdAt": "2026-10-20T23:30:00.000Z"
+  },
+  {
+    "id": "game-candy-box-2",
+    "title": "Candy Box 2",
+    "category": "Idle",
+    "author": "aniwey",
+    "description": "The legendary ASCII art incremental adventure RPG. Start by eating candies, unlock the candy merchant, brew potions, explore caves, and discover surreal secrets.",
+    "sourceType": "url",
+    "sourceRepo": "aniwey/candybox2",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://candybox2.github.io/",
+    "coverUrl": "https://upload.wikimedia.org/wikipedia/en/9/93/Candy_Box_2_logo.png",
+    "createdAt": "2026-10-20T23:29:00.000Z"
+  },
+  {
+    "id": "game-space-invaders",
+    "title": "Space Invaders",
+    "category": "Arcade",
+    "author": "dwmkerr / Taito",
+    "description": "The definitive retro arcade space shooter. Defend earth from rhythmic descending alien armadas, dodge enemy laser fire, and shoot the mystery flying saucers.",
+    "sourceType": "url",
+    "sourceRepo": "dwmkerr/spaceinvaders",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://dwmkerr.github.io/spaceinvaders/",
+    "coverUrl": "https://upload.wikimedia.org/wikipedia/en/thumb/0/05/Space_Invaders_Flyer.png/220px-Space_Invaders_Flyer.png",
+    "createdAt": "2026-10-20T23:28:00.000Z"
+  },
+  {
+    "id": "game-snake-classic",
+    "title": "Snake Classic",
+    "category": "Arcade",
+    "author": "Patrick Roberts",
+    "description": "Timeless retro arcade snake game. Eat apples to grow longer while avoiding collisions with the border walls and your own slithering tail.",
+    "sourceType": "url",
+    "sourceRepo": "patorjk/snake",
+    "sourceDir": "",
+    "sourcePath": "",
+    "playUrl": "https://patorjk.com/games/snake/",
+    "coverUrl": "https://cdn.iconscout.com/icon/free/png-512/free-snake-game-458428.png",
+    "createdAt": "2026-10-20T23:27:00.000Z"
+  }
+];
+
+  let allGames = typeof DEFAULT_GAMES !== 'undefined' ? [...DEFAULT_GAMES] : [];
   let activeCategory = 'All';
   let currentPlayingGame = null;
   let pendingIconGame = null;
@@ -2009,7 +2421,7 @@
   function renderGames() {
     const query = searchInput.value.trim().toLowerCase();
     const filtered = allGames.filter((game) => {
-      const matchesCat = activeCategory === 'All' || game.category === activeCategory;
+      const matchesCat = activeCategory === 'All' || (game.category && game.category.trim().toLowerCase() === activeCategory.trim().toLowerCase());
       const matchesQuery =
         !query ||
         game.title.toLowerCase().includes(query) ||
@@ -2124,8 +2536,8 @@
     gamePageRelatedGrid.innerHTML = '';
 
     const candidates = allGames.filter((g) => g.id !== currentGame.id);
-    const sameCat = candidates.filter((g) => g.category === currentGame.category);
-    const otherCat = candidates.filter((g) => g.category !== currentGame.category);
+    const sameCat = candidates.filter((g) => (g.category || '').trim().toLowerCase() === (currentGame.category || '').trim().toLowerCase());
+    const otherCat = candidates.filter((g) => (g.category || '').trim().toLowerCase() !== (currentGame.category || '').trim().toLowerCase());
     const related = [...sameCat, ...otherCat].slice(0, 4);
 
     if (related.length === 0) {
@@ -2815,39 +3227,77 @@
 
   // Load initial games from server or IndexedDB
   async function fetchGames() {
+    let serverGames = null;
     try {
       const res = await fetch('/api/games');
       if (res.ok) {
-        allGames = await res.json();
-        renderGames();
-        checkInitialGameRoute();
-        return;
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          serverGames = data;
+        }
       }
     } catch {
-      // Fallback below
+      // Backend not running / static host
     }
 
-    // Static hosting fallback
+    if (serverGames) {
+      allGames = serverGames;
+      for (const g of serverGames) {
+        try { await idbSaveGame(g); } catch {}
+      }
+      renderGames();
+      checkInitialGameRoute();
+      return;
+    }
+
+    // Static hosting / Offline fallback
     let idbGames = await idbGetGames();
-    if (!idbGames || idbGames.length === 0) {
+    if (!Array.isArray(idbGames)) idbGames = [];
+
+    let staticGames = [];
+    try {
+      const staticRes = await fetch('./data/games.json');
+      if (staticRes.ok) {
+        const json = await staticRes.json();
+        if (Array.isArray(json) && json.length > 0) staticGames = json;
+      }
+    } catch {}
+
+    if (staticGames.length === 0) {
       try {
         const staticRes = await fetch('/data/games.json');
         if (staticRes.ok) {
-          const defaultList = await staticRes.json();
-          if (Array.isArray(defaultList) && defaultList.length > 0) {
-            idbGames = defaultList;
-            for (const g of defaultList) {
-              await idbPutGame(g);
-            }
-          }
+          const json = await staticRes.json();
+          if (Array.isArray(json) && json.length > 0) staticGames = json;
         }
       } catch {}
     }
-    allGames = idbGames || [];
+
+    const catalogSource = staticGames.length > 0 ? staticGames : DEFAULT_GAMES;
+    const existingIdSet = new Set(idbGames.map((g) => g.id));
+
+    // Merge missing catalog games so existing users with old IndexedDB cache automatically get new genres!
+    for (const catalogGame of catalogSource) {
+      if (!existingIdSet.has(catalogGame.id)) {
+        idbGames.push(catalogGame);
+        try { await idbSaveGame(catalogGame); } catch {}
+      }
+    }
+
+    if (idbGames.length === 0) {
+      idbGames = [...DEFAULT_GAMES];
+      for (const g of DEFAULT_GAMES) {
+        try { await idbSaveGame(g); } catch {}
+      }
+    }
+
+    allGames = idbGames;
     renderGames();
     checkInitialGameRoute();
   }
 
+  // Render default catalog games immediately on load
+  renderGames();
   checkAdminSession();
   fetchGames();
 
