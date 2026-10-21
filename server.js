@@ -217,7 +217,37 @@ async function searchGameIcons(rawQuery) {
     });
   };
 
-  // 1. DuckDuckGo Image Search API (Fast, authentic game icons with direct CDN delivery)
+  // 1. Google Images (Official Google-hosted 512x512 game icons via googleusercontent.com CDN)
+  try {
+    const googleUrl = `https://play.google.com/store/search?q=${encodeURIComponent(base)}&c=apps`;
+    const gRes = await fetch(googleUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+    if (gRes.ok) {
+      const gHtml = await gRes.text();
+      const iconMatches = [...gHtml.matchAll(/(https:\/\/(?:play-lh|lh3)\.googleusercontent\.com\/[a-zA-Z0-9_\-=]+)=s\d+/gi)];
+      const addedBases = new Set();
+      for (const m of iconMatches) {
+        const baseUri = m[1];
+        if (!addedBases.has(baseUri)) {
+          addedBases.add(baseUri);
+          const hdGoogleIcon = `${baseUri}=s512-rw`;
+          const thumbGoogleIcon = `${baseUri}=s256-rw`;
+          addResult(hdGoogleIcon, thumbGoogleIcon, `${base} (Google Images)`);
+          if (results.length >= 5) break;
+        }
+      }
+    }
+  } catch (err) {
+    // Continue to next providers
+  }
+
+  // 2. DuckDuckGo Image Search API (Fast, authentic game icons with direct CDN delivery)
   try {
     const ddgPageUrl = `https://duckduckgo.com/?q=${encodeURIComponent(base + ' game icon')}&iax=images&ia=images`;
     const ddgRes = await fetch(ddgPageUrl, {

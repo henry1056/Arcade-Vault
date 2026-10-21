@@ -1215,6 +1215,10 @@
     iconSelectForm.hidden = false;
     iconSearchQueryBadge.textContent = expectedQuery;
     iconLoadingQuery.textContent = `"${expectedQuery}"`;
+    const uploadOpenGoogleLink = document.getElementById('upload-open-google-images');
+    if (uploadOpenGoogleLink) {
+      uploadOpenGoogleLink.href = `https://www.google.com/search?q=${encodeURIComponent(createdGame.title + ' game icon')}&tbm=isch`;
+    }
     iconLoadingState.hidden = false;
     iconResultsFieldset.hidden = true;
     iconStepStatus.hidden = true;
@@ -3511,6 +3515,15 @@
         editAutofetchIconBtn.textContent = origText;
         editAutofetchIconBtn.disabled = false;
       }
+    });
+  }
+
+  const editBrowseGoogleBtn = document.getElementById('edit-browse-google-btn');
+  if (editBrowseGoogleBtn) {
+    editBrowseGoogleBtn.addEventListener('click', () => {
+      const title = editGameTitle?.value?.trim() || 'game';
+      const url = `https://www.google.com/search?q=${encodeURIComponent(title + ' game icon')}&tbm=isch`;
+      window.open(url, '_blank', 'noopener,noreferrer');
     });
   }
 
