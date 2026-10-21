@@ -143,6 +143,13 @@ function readGames() {
 
 function writeGames(games) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(games, null, 2), 'utf8');
+  try {
+    const publicDataFile = path.join(ROOT_DIR, 'public', 'data', 'games.json');
+    fs.mkdirSync(path.dirname(publicDataFile), { recursive: true });
+    fs.writeFileSync(publicDataFile, JSON.stringify(games, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('Warning: Could not write to public/data/games.json:', err.message);
+  }
 }
 
 function readSuggestions() {
@@ -1512,18 +1519,26 @@ async function ripItchGameCode(itchUrl, tempGameDir, targetGameDir, sendEvent) {
   let iframeUrl = null;
   if (pageHtml) {
     const unescaped = pageHtml.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-    const iframeMatch = unescaped.match(/https:\/\/(?:[a-zA-Z0-9-]+\.)?(?:itch\.zone|ssl\.hwcdn\.net)\/html\/\d+\/(?:index\.html)?(?:\?[^"'<>\s]*)?/i);
-    if (iframeMatch) {
-      iframeUrl = iframeMatch[0];
-      if (!iframeUrl.includes('index.html')) {
-        iframeUrl = iframeUrl.replace(/\/+$/, '') + '/index.html';
-      }
-    } else {
-      const dataIframeMatch = pageHtml.match(/data-iframe="([^"]+)"/i);
-      if (dataIframeMatch) {
-        const decoded = dataIframeMatch[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-        const srcMatch = decoded.match(/src="([^"]+)"/i);
-        if (srcMatch) iframeUrl = srcMatch[1];
+    const dataIframeMatch = pageHtml.match(/data-iframe="([^"]+)"/i);
+    if (dataIframeMatch) {
+      const decoded = dataIframeMatch[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+      const srcMatch = decoded.match(/src="([^"]+)"/i);
+      if (srcMatch) iframeUrl = srcMatch[1];
+    }
+
+    if (!iframeUrl) {
+      const dropMatch = unescaped.match(/<iframe[^>]+(?:id="game_drop"|class="[^"]*game_frame[^"]*")[^>]+src="([^"]+)"/i) ||
+                        unescaped.match(/<iframe[^>]+src="([^"]+)"[^>]+(?:id="game_drop"|class="[^"]*game_frame[^"]*")/i);
+      if (dropMatch) iframeUrl = dropMatch[1];
+    }
+
+    if (!iframeUrl) {
+      const zoneMatch = unescaped.match(/https:\/\/(?:[a-zA-Z0-9-]+\.)?(?:itch\.zone|ssl\.hwcdn\.net)\/html\/[0-9a-zA-Z_-]+(?:\/index\.html)?(?:\?[^"'<>\s]*)?/i);
+      if (zoneMatch) {
+        iframeUrl = zoneMatch[0];
+        if (!iframeUrl.includes('index.html')) {
+          iframeUrl = iframeUrl.replace(/\/+$/, '') + '/index.html';
+        }
       }
     }
   }
@@ -1532,25 +1547,38 @@ async function ripItchGameCode(itchUrl, tempGameDir, targetGameDir, sendEvent) {
     sendEvent('log', { level: 'info', message: `🎯 Found embedded HTML5 player: ${iframeUrl}` });
     sendEvent('log', { level: 'info', message: '📥 Ripping game bundle & assets (scripts, WASM, audio, textures)...' });
 
-    const ripResult = await ripHtml5GameFromIndexUrl(
-      iframeUrl,
-      targetGameDir,
-      (msg) => sendEvent('log', { level: 'info', message: msg }),
-      (curr, total) => {
-        const pct = Math.round((curr / total) * 100);
-        sendEvent('download_progress', { current: curr, total, percent: pct });
-      }
-    );
+    try {
+      const ripResult = await ripHtml5GameFromIndexUrl(
+        iframeUrl,
+        targetGameDir,
+        (msg) => sendEvent('log', { level: 'info', message: msg }),
+        (curr, total) => {
+          const pct = Math.round((curr / total) * 100);
+          sendEvent('download_progress', { current: curr, total, percent: pct });
+        }
+      );
 
-    const found = findEntryHtml(targetGameDir);
-    if (found) {
-      sendEvent('log', { level: 'success', message: `✅ Ripped ${ripResult.downloadedCount} game file(s) into local storage.` });
-      return {
-        entryRelPath: found,
-        meta: pageMeta,
-        fileCount: ripResult.downloadedCount
-      };
+      const found = findEntryHtml(targetGameDir);
+      if (found) {
+        sendEvent('log', { level: 'success', message: `✅ Ripped ${ripResult.downloadedCount} game file(s) into local storage.` });
+        return {
+          entryRelPath: found,
+          meta: pageMeta,
+          fileCount: ripResult.downloadedCount,
+          playerUrl: iframeUrl
+        };
+      }
+    } catch (err) {
+      sendEvent('log', { level: 'warn', message: `Full bundle asset ripper had a notice: ${err.message}. Using direct unblocked HTML5 player embed.` });
     }
+
+    // Direct player embed fallback if individual asset ripping was restricted
+    return {
+      entryRelPath: '',
+      meta: pageMeta,
+      fileCount: 1,
+      playerUrl: iframeUrl
+    };
   }
 
   // Tier 3: Direct downloadable zip package
@@ -1579,40 +1607,57 @@ async function ripItchGameCode(itchUrl, tempGameDir, targetGameDir, sendEvent) {
   throw new Error('Unable to rip game code from itch.io. Game may be downloadable-only (non-HTML5) or requires a purchase.');
 }
 
-// GET /api/resolve-itch - Resolve direct embed/player iframe for an itch.io game
-app.get('/api/resolve-itch', async (req, res) => {
-  const itchUrl = String(req.query.url || '').trim();
-  if (!itchUrl) {
-    return res.status(400).json({ error: 'Valid URL is required.' });
+// Universal resolver & ripper for itch.io games
+async function resolveOrRipItchGame(itchUrl, { rip = false, gameId = null } = {}) {
+  const cleanUrl = String(itchUrl || '').trim();
+  if (!cleanUrl) return null;
+
+  // 1. Check existing library
+  const existing = readGames().find((g) => {
+    const repo = String(g.sourceRepo || '').toLowerCase();
+    const play = String(g.playUrl || '').toLowerCase();
+    const target = cleanUrl.toLowerCase();
+    return repo === target || play === target || (target.includes('polytrack') && g.id === 'game-polytrack');
+  });
+
+  if (existing && existing.playUrl && (existing.playUrl.startsWith('/uploads/') || existing.playUrl.includes('.itch.zone/'))) {
+    return {
+      playUrl: existing.playUrl,
+      isLocal: existing.playUrl.startsWith('/uploads/'),
+      title: existing.title,
+      gameId: existing.id
+    };
   }
 
-  // Check known local builds
-  if (itchUrl.includes('polytrack')) {
-    return res.json({
+  // 2. Check hardcoded/known local games
+  if (cleanUrl.includes('polytrack')) {
+    return {
       playUrl: '/uploads/games/game-polytrack/index.html',
       isLocal: true,
-      title: 'Polytrack'
-    });
+      title: 'Polytrack',
+      gameId: 'game-polytrack'
+    };
   }
-  if (itchUrl.includes('wbwwb')) {
-    return res.json({
+  if (cleanUrl.includes('wbwwb')) {
+    return {
       playUrl: '/uploads/games/game-wbwwb/index.html',
       isLocal: true,
-      title: 'We Become What We Behold'
-    });
+      title: 'We Become What We Behold',
+      gameId: 'game-wbwwb'
+    };
   }
 
+  // 3. Scrape itch.io page server-side to extract player embed
   try {
-    const pageRes = await fetch(itchUrl, {
+    const pageRes = await fetch(cleanUrl, {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
       }
     });
-    if (!pageRes.ok) {
-      return res.status(404).json({ error: 'Game page not found.' });
-    }
+    if (!pageRes.ok) return null;
+
     const html = await pageRes.text();
     let playerUrl = null;
 
@@ -1628,24 +1673,78 @@ app.get('/api/resolve-itch', async (req, res) => {
       if (srcMatch) playerUrl = srcMatch[1];
     }
 
-    // 2. Check direct itch.zone or hwcdn iframe in HTML
+    // 2. Check direct game iframe with id="game_drop" or class="game_frame"
     if (!playerUrl) {
-      const zoneMatch = html.match(/https:\/\/(?:[a-zA-Z0-9-]+\.)?(?:itch\.zone|ssl\.hwcdn\.net)\/html\/\d+\/(?:index\.html)?(?:\?[^"'<>\s]*)?/i);
+      const dropMatch = html.match(/<iframe[^>]+(?:id="game_drop"|class="[^"]*game_frame[^"]*")[^>]+src="([^"]+)"/i) ||
+                        html.match(/<iframe[^>]+src="([^"]+)"[^>]+(?:id="game_drop"|class="[^"]*game_frame[^"]*")/i);
+      if (dropMatch) playerUrl = dropMatch[1];
+    }
+
+    // 3. Check direct itch.zone or hwcdn iframe in HTML (supporting hyphenated build IDs like 17623133-1992460)
+    if (!playerUrl) {
+      const zoneMatch = html.match(/https:\/\/(?:[a-zA-Z0-9-]+\.)?(?:itch\.zone|ssl\.hwcdn\.net)\/html\/[0-9a-zA-Z_-]+(?:\/index\.html)?(?:\?[^"'<>\s]*)?/i);
       if (zoneMatch) playerUrl = zoneMatch[0];
     }
 
-    if (playerUrl) {
-      return res.json({
-        playUrl,
-        isLocal: false,
-        sourceRepo: itchUrl
-      });
+    if (!playerUrl) return null;
+
+    const titleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i) || html.match(/<title>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].replace(/by\s+.*$/i, '').trim() : 'itch.io Game';
+
+    // 4. If ripping is requested and we have the player URL, rip assets to disk
+    if (rip && playerUrl) {
+      const targetId = gameId || `game-itch-${Date.now()}`;
+      const targetGameDir = path.join(GAMES_DIR, targetId);
+      const publicGameDir = path.join(ROOT_DIR, 'public', 'uploads', 'games', targetId);
+
+      try {
+        const ripResult = await ripHtml5GameFromIndexUrl(playerUrl, targetGameDir);
+        const found = findEntryHtml(targetGameDir);
+        if (found) {
+          if (!fs.existsSync(publicGameDir)) fs.mkdirSync(publicGameDir, { recursive: true });
+          fs.cpSync(targetGameDir, publicGameDir, { recursive: true });
+
+          return {
+            playUrl: `/uploads/games/${targetId}/${found.replace(/\\/g, '/')}`,
+            isLocal: true,
+            title,
+            fileCount: ripResult.downloadedCount,
+            gameId: targetId,
+            playerUrl
+          };
+        }
+      } catch (ripErr) {
+        console.warn(`Asset ripper warning for ${cleanUrl}:`, ripErr.message);
+      }
     }
 
-    return res.status(404).json({ error: 'No playable HTML5 embed found on page.' });
+    return {
+      playUrl: playerUrl,
+      isLocal: false,
+      title,
+      playerUrl
+    };
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error(`Error resolving itch game ${cleanUrl}:`, err);
+    return null;
   }
+}
+
+// GET /api/resolve-itch - Resolve direct embed/player iframe for an itch.io game
+app.get('/api/resolve-itch', async (req, res) => {
+  const itchUrl = String(req.query.url || '').trim();
+  if (!itchUrl) {
+    return res.status(400).json({ error: 'Valid URL is required.' });
+  }
+
+  const shouldRip = req.query.rip === '1' || req.query.rip === 'true';
+  const resolved = await resolveOrRipItchGame(itchUrl, { rip: shouldRip });
+
+  if (resolved && resolved.playUrl) {
+    return res.json(resolved);
+  }
+
+  return res.status(404).json({ error: 'No playable HTML5 embed found on page.' });
 });
 
 // POST /api/admin/import-itchio - Import free HTML5 web games from itch.io via itchio-downloader (Admin Only)
@@ -1782,17 +1881,37 @@ app.post('/api/admin/import-itchio', requireAdmin, async (req, res) => {
         }
       }
 
+      // If ripped locally into targetGameDir, copy to public directory for static hosting
+      if (entryRelPath && fs.existsSync(targetGameDir)) {
+        const publicGameDir = path.join(ROOT_DIR, 'public', 'uploads', 'games', gameId);
+        try {
+          if (!fs.existsSync(publicGameDir)) fs.mkdirSync(publicGameDir, { recursive: true });
+          fs.cpSync(targetGameDir, publicGameDir, { recursive: true });
+        } catch (cpErr) {
+          console.warn('Failed to mirror game assets to public directory:', cpErr.message);
+        }
+      }
+
+      let playUrl = '';
+      if (entryRelPath) {
+        playUrl = `/uploads/games/${gameId}/${entryRelPath.replace(/\\/g, '/')}`;
+      } else if (ripData.playerUrl) {
+        playUrl = ripData.playerUrl;
+      } else {
+        playUrl = itchUrl;
+      }
+
       const newGame = {
         id: gameId,
         title,
         category,
         author,
-        description: `Imported from itch.io: ${title} by ${author}`,
+        description: meta.description || `Imported from itch.io: ${title} by ${author}`,
         sourceType: 'itchio',
         sourceRepo: itchUrl,
-        sourceDir: '',
-        sourcePath: entryRelPath,
-        playUrl: `/uploads/games/${gameId}/${entryRelPath.replace(/\\/g, '/')}`,
+        sourceDir: entryRelPath ? `uploads/games/${gameId}` : '',
+        sourcePath: entryRelPath || '',
+        playUrl,
         coverUrl,
         createdAt: new Date().toISOString()
       };
@@ -1971,7 +2090,7 @@ app.post(
     { name: 'gameFile', maxCount: 1 },
     { name: 'coverFile', maxCount: 1 }
   ]),
-  (req, res) => {
+  async (req, res) => {
     const gameFile = req.files?.gameFile?.[0];
     const coverFile = req.files?.coverFile?.[0];
 
@@ -2003,6 +2122,18 @@ app.post(
         }
         playUrl = externalUrl;
         if (gameFile && fs.existsSync(gameFile.path)) fs.unlinkSync(gameFile.path);
+
+        // If this is an itch.io URL, automatically rip or resolve it every time!
+        if (externalUrl.includes('.itch.io/') && !externalUrl.includes('.itch.zone/')) {
+          try {
+            const resolved = await resolveOrRipItchGame(externalUrl, { rip: true, gameId: id });
+            if (resolved?.playUrl) {
+              playUrl = resolved.playUrl;
+            }
+          } catch (err) {
+            console.warn('Itch resolver notice on upload:', err.message);
+          }
+        }
       } else {
         if (!gameFile) {
           cleanupTmp();
@@ -2056,6 +2187,13 @@ app.post(
           cleanupTmp();
           return res.status(400).json({ error: 'Only .html, .htm, or .zip files are supported for playable web games.' });
         }
+
+        // Mirror locally extracted package to public directory for static hosting
+        const publicGameDir = path.join(ROOT_DIR, 'public', 'uploads', 'games', id);
+        try {
+          if (!fs.existsSync(publicGameDir)) fs.mkdirSync(publicGameDir, { recursive: true });
+          fs.cpSync(targetGameDir, publicGameDir, { recursive: true });
+        } catch {}
       }
 
       let coverUrl = null;
@@ -2077,7 +2215,10 @@ app.post(
         category,
         author: author || 'Indie Creator',
         description: description || 'No description provided.',
-        sourceType,
+        sourceType: externalUrl.includes('.itch.io/') ? 'itchio' : sourceType,
+        sourceRepo: externalUrl || '',
+        sourceDir: playUrl.startsWith('/uploads/games/') ? `uploads/games/${id}` : '',
+        sourcePath: playUrl.startsWith('/uploads/games/') ? path.basename(playUrl) : '',
         playUrl,
         coverUrl,
         createdAt: new Date().toISOString()

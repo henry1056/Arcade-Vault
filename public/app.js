@@ -1314,6 +1314,11 @@
     let htmlContent = null;
     if (sourceType === 'url') {
       playUrl = gameUrl;
+      if (gameUrl.includes('polytrack')) {
+        playUrl = '/uploads/games/game-polytrack/index.html';
+      } else if (gameUrl.includes('wbwwb')) {
+        playUrl = '/uploads/games/game-wbwwb/index.html';
+      }
     } else if (gameFile && gameFile instanceof File) {
       playUrl = URL.createObjectURL(gameFile);
       if (gameFile.name.endsWith('.html') || gameFile.name.endsWith('.htm') || gameFile.type === 'text/html') {
@@ -1393,6 +1398,7 @@
         progressLabel.textContent = 'Upload complete!';
         const createdGame = JSON.parse(xhr.responseText);
         allGames.unshift(createdGame);
+        try { idbSaveGame(createdGame); } catch {}
         renderGames();
 
         uploadForm.reset();
@@ -2604,7 +2610,8 @@
         if (targetUrl.includes('.itch.io/') && !targetUrl.includes('.itch.zone/')) {
           gamePageIframe.removeAttribute('srcdoc');
           gamePageIframe.src = 'about:blank';
-          fetch(`/api/resolve-itch?url=${encodeURIComponent(targetUrl)}`)
+          // Auto-rip and resolve the direct playable code every time
+          fetch(`/api/resolve-itch?url=${encodeURIComponent(targetUrl)}&rip=1`)
             .then((res) => {
               if (!res.ok) throw new Error('Failed to resolve');
               return res.json();
@@ -2612,6 +2619,12 @@
             .then((data) => {
               if (data && data.playUrl) {
                 game.playUrl = data.playUrl;
+                if (data.isLocal) {
+                  game.sourceDir = `uploads/games/${data.gameId || ''}`;
+                  game.sourcePath = 'index.html';
+                }
+                const existingIdx = allGames.findIndex((g) => g.id === game.id);
+                if (existingIdx !== -1) allGames[existingIdx] = game;
                 if (currentPlayingGame && currentPlayingGame.id === game.id) {
                   gamePageIframe.src = data.playUrl;
                   if (gamePageNewtabLink) gamePageNewtabLink.href = data.playUrl;
@@ -2743,7 +2756,7 @@
             gamePageIframe.srcdoc = currentPlayingGame.htmlContent;
           }
         } else if (playUrl.includes('.itch.io/') && !playUrl.includes('.itch.zone/')) {
-          fetch(`/api/resolve-itch?url=${encodeURIComponent(playUrl)}`)
+          fetch(`/api/resolve-itch?url=${encodeURIComponent(playUrl)}&rip=1`)
             .then((res) => res.json())
             .then((data) => {
               if (data && data.playUrl) {
