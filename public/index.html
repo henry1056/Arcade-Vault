@@ -281,13 +281,19 @@
 
         <div class="category-pills" role="group" aria-label="Filter by category" id="category-filters">
           <button type="button" class="pill active" data-category="All" aria-pressed="true">All Games</button>
-          <button type="button" class="pill" data-category="Arcade" aria-pressed="false">Arcade</button>
-          <button type="button" class="pill" data-category="Action" aria-pressed="false">Action</button>
-          <button type="button" class="pill" data-category="Puzzle" aria-pressed="false">Puzzle</button>
-          <button type="button" class="pill" data-category="Platformer" aria-pressed="false">Platformer</button>
-          <button type="button" class="pill" data-category="Strategy" aria-pressed="false">Strategy</button>
-          <button type="button" class="pill" data-category="RPG" aria-pressed="false">RPG</button>
-          <button type="button" class="pill" data-category="Retro" aria-pressed="false">Retro</button>
+          <button type="button" class="pill" data-category="Fighting" aria-pressed="false">🥊 Fighting</button>
+          <button type="button" class="pill" data-category="Shooter" aria-pressed="false">🎯 Shooter</button>
+          <button type="button" class="pill" data-category="Racing" aria-pressed="false">🏎️ Racing</button>
+          <button type="button" class="pill" data-category="Action" aria-pressed="false">⚡ Action</button>
+          <button type="button" class="pill" data-category="Platformer" aria-pressed="false">🏃 Platformer</button>
+          <button type="button" class="pill" data-category="Puzzle" aria-pressed="false">🧩 Puzzle</button>
+          <button type="button" class="pill" data-category="Sports" aria-pressed="false">⚽ Sports</button>
+          <button type="button" class="pill" data-category="Retro" aria-pressed="false">🕹️ Retro</button>
+          <button type="button" class="pill" data-category="Horror" aria-pressed="false">👻 Horror</button>
+          <button type="button" class="pill" data-category="Idle" aria-pressed="false">🍪 Idle</button>
+          <button type="button" class="pill" data-category="Strategy" aria-pressed="false">♟️ Strategy</button>
+          <button type="button" class="pill" data-category="RPG" aria-pressed="false">⚔️ RPG</button>
+          <button type="button" class="pill" data-category="Arcade" aria-pressed="false">👾 Arcade</button>
         </div>
       </form>
     </search>
@@ -592,13 +598,19 @@
             <label for="game-category">Category</label>
             <span id="category-hint" class="hint">Primary genre tag.</span>
             <select id="game-category" name="category" aria-describedby="category-hint">
-              <option value="Arcade">Arcade</option>
+              <option value="Fighting">Fighting</option>
+              <option value="Shooter">Shooter</option>
+              <option value="Racing">Racing</option>
               <option value="Action">Action</option>
-              <option value="Puzzle">Puzzle</option>
               <option value="Platformer">Platformer</option>
+              <option value="Puzzle">Puzzle</option>
+              <option value="Sports">Sports</option>
+              <option value="Retro">Retro</option>
+              <option value="Horror">Horror</option>
+              <option value="Idle">Idle</option>
               <option value="Strategy">Strategy</option>
               <option value="RPG">RPG</option>
-              <option value="Retro">Retro</option>
+              <option value="Arcade" selected>Arcade</option>
               <option value="Other">Other</option>
             </select>
           </div>
@@ -823,13 +835,19 @@
             <span id="mass-cat-hint" class="hint">Assigned genre (or auto-detect).</span>
             <select id="mass-category" name="category" aria-describedby="mass-cat-hint">
               <option value="Auto">Auto-detect from game title</option>
-              <option value="Arcade">Arcade</option>
+              <option value="Fighting">Fighting</option>
+              <option value="Shooter">Shooter</option>
+              <option value="Racing">Racing</option>
               <option value="Action">Action</option>
-              <option value="Puzzle">Puzzle</option>
               <option value="Platformer">Platformer</option>
+              <option value="Puzzle">Puzzle</option>
+              <option value="Sports">Sports</option>
+              <option value="Retro">Retro</option>
+              <option value="Horror">Horror</option>
+              <option value="Idle">Idle</option>
               <option value="Strategy">Strategy</option>
               <option value="RPG">RPG</option>
-              <option value="Retro">Retro</option>
+              <option value="Arcade">Arcade</option>
             </select>
           </div>
 
@@ -1008,13 +1026,19 @@
             <label for="edit-game-category">Category</label>
             <span id="edit-cat-hint" class="hint">Genre filter.</span>
             <select id="edit-game-category" name="category" aria-describedby="edit-cat-hint">
-              <option value="Arcade">Arcade</option>
+              <option value="Fighting">Fighting</option>
+              <option value="Shooter">Shooter</option>
+              <option value="Racing">Racing</option>
               <option value="Action">Action</option>
-              <option value="Puzzle">Puzzle</option>
               <option value="Platformer">Platformer</option>
+              <option value="Puzzle">Puzzle</option>
+              <option value="Sports">Sports</option>
+              <option value="Retro">Retro</option>
+              <option value="Horror">Horror</option>
+              <option value="Idle">Idle</option>
               <option value="Strategy">Strategy</option>
               <option value="RPG">RPG</option>
-              <option value="Retro">Retro</option>
+              <option value="Arcade">Arcade</option>
               <option value="Other">Other</option>
             </select>
           </div>
@@ -1311,13 +1335,19 @@
             <span id="itch-category-hint" class="hint">Auto-inferred from itch.io tags if Auto is selected.</span>
             <select id="itch-category-select" name="category" aria-describedby="itch-category-hint">
               <option value="Auto" selected>Auto-detect from tags</option>
-              <option value="Arcade">Arcade</option>
+              <option value="Fighting">Fighting</option>
+              <option value="Shooter">Shooter</option>
+              <option value="Racing">Racing</option>
               <option value="Action">Action</option>
-              <option value="Puzzle">Puzzle</option>
               <option value="Platformer">Platformer</option>
+              <option value="Puzzle">Puzzle</option>
+              <option value="Sports">Sports</option>
               <option value="Retro">Retro</option>
-              <option value="RPG">RPG</option>
+              <option value="Horror">Horror</option>
+              <option value="Idle">Idle</option>
               <option value="Strategy">Strategy</option>
+              <option value="RPG">RPG</option>
+              <option value="Arcade">Arcade</option>
             </select>
           </div>
 

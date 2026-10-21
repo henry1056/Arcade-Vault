@@ -1029,12 +1029,18 @@ function inferCategoryFromItch(title, tags = [], defaultCategory = 'Auto') {
   }
   const tagStr = (Array.isArray(tags) ? tags.join(' ') : String(tags || '')).toLowerCase();
   const lower = (String(title || '') + ' ' + tagStr).toLowerCase();
-  if (/puzzle|2048|tetris|match|block|sudoku|chess|wordle|minesweeper|physics|logic/i.test(lower)) return 'Puzzle';
-  if (/retro|arcade|pixel|pixel-art|8-bit|16-bit|atari|nes|snes|gameboy|arcade/i.test(lower)) return 'Retro';
-  if (/platformer|platform|jump|runner|metroidvania|climb/i.test(lower)) return 'Platformer';
-  if (/strategy|tactics|tower-defense|defense|card|board|deck|management|turn-based/i.test(lower)) return 'Strategy';
-  if (/rpg|role-playing|adventure|quest|dungeon|roguelike|roguelite|story|narrative/i.test(lower)) return 'RPG';
-  if (/action|shooter|fps|bullet-hell|fighting|survival|horror|stealth|racing|sports/i.test(lower)) return 'Action';
+  if (/fight|fighter|combat|brawl|boxing|boxer|punch|martial|karate|smash|wrestle|ninja|snout|battle/i.test(lower)) return 'Fighting';
+  if (/shoot|shooter|gun|fps|sniper|bullet|weapon|rifle|blast|aim|strike|1v1|krunker|doom/i.test(lower)) return 'Shooter';
+  if (/race|racing|drift|drive|driver|car|speed|kart|vehicle|traffic|highway|road|slow roads|hexgl/i.test(lower)) return 'Racing';
+  if (/sport|sports|ball|soccer|football|basket|golf|tennis|baseball|hockey|skate|retro bowl/i.test(lower)) return 'Sports';
+  if (/horror|creepy|spooky|scary|fnaf|slender|zombie|haunt|nightmare|escape/i.test(lower)) return 'Horror';
+  if (/idle|clicker|tycoon|incremental|tap|cookie/i.test(lower)) return 'Idle';
+  if (/puzzle|2048|tetris|match|block|sudoku|chess|wordle|minesweeper|cut the rope|physics|logic/i.test(lower)) return 'Puzzle';
+  if (/platform|platformer|jump|runner|run|climb|vex|geometry dash|ovo|doodle|mario|sonic/i.test(lower)) return 'Platformer';
+  if (/strategy|defense|tower|card|tactics|bloons|deck|kingdom/i.test(lower)) return 'Strategy';
+  if (/rpg|quest|adventure|dungeon|pokemon|zelda|final fantasy|craft/i.test(lower)) return 'RPG';
+  if (/retro|pacman|pac-man|space invaders|galaga|asteroids|pong|atari|nes|gba|pixel/i.test(lower)) return 'Retro';
+  if (/slope|action|dodge|chaos|rush/i.test(lower)) return 'Action';
   return 'Arcade';
 }
 

@@ -111,15 +111,19 @@
     const safeCat = (category || 'Arcade').trim().toUpperCase();
 
     const colorPalettes = {
+      Fighting: { from: '#dc2626', to: '#7f1d1d', glow: '#ef4444' },
+      Shooter: { from: '#f43f5e', to: '#9f1239', glow: '#fb7185' },
+      Racing: { from: '#f59e0b', to: '#b45309', glow: '#fbbf24' },
       Action: { from: '#f97316', to: '#dc2626', glow: '#fb923c' },
-      Arcade: { from: '#8b5cf6', to: '#ec4899', glow: '#a855f7' },
-      Adventure: { from: '#10b981', to: '#059669', glow: '#34d399' },
-      Puzzle: { from: '#06b6d4', to: '#3b82f6', glow: '#38bdf8' },
+      Platformer: { from: '#10b981', to: '#047857', glow: '#34d399' },
+      Puzzle: { from: '#06b6d4', to: '#0369a1', glow: '#38bdf8' },
+      Sports: { from: '#16a34a', to: '#14532d', glow: '#22c55e' },
       Retro: { from: '#d946ef', to: '#7c3aed', glow: '#e879f9' },
-      Shooter: { from: '#ef4444', to: '#b91c1c', glow: '#f87171' },
-      Strategy: { from: '#6366f1', to: '#4338ca', glow: '#818cf8' },
-      Sports: { from: '#22c55e', to: '#15803d', glow: '#4ade80' },
-      Racing: { from: '#eab308', to: '#d97706', glow: '#fde047' },
+      Horror: { from: '#334155', to: '#0f172a', glow: '#94a3b8' },
+      Idle: { from: '#eab308', to: '#a16207', glow: '#fef08a' },
+      Strategy: { from: '#6366f1', to: '#3730a3', glow: '#818cf8' },
+      RPG: { from: '#8b5cf6', to: '#5b21b6', glow: '#a78bfa' },
+      Arcade: { from: '#8b5cf6', to: '#ec4899', glow: '#a855f7' },
       Other: { from: '#64748b', to: '#334155', glow: '#94a3b8' }
     };
 
@@ -1429,12 +1433,18 @@
       return defaultCategory;
     }
     const lower = String(title || '').toLowerCase();
-    if (/puzzle|2048|tetris|match|block|sudoku|chess|wordle|minesweeper|cut the rope/i.test(lower)) return 'Puzzle';
-    if (/mario|sonic|retro|arcade|pacman|pac-man|space invaders|galaga|asteroids|pong|snake|atari|nes|gba|doom/i.test(lower)) return 'Retro';
-    if (/platform|jump|runner|run|climb|vex|geometry dash|ovo|doodle/i.test(lower)) return 'Platformer';
-    if (/strategy|defense|tower|card|tactics|bloons|idle|clicker|tycoon/i.test(lower)) return 'Strategy';
-    if (/rpg|quest|adventure|dungeon|pokemon|zelda|final fantasy/i.test(lower)) return 'RPG';
-    if (/action|shooter|bullet|fight|combat|ninja|racing|hexgl|drive|speed|slope|1v1|krunker|gun/i.test(lower)) return 'Action';
+    if (/fight|fighter|combat|brawl|boxing|boxer|punch|martial|karate|smash|wrestle|ninja|snout|battle/i.test(lower)) return 'Fighting';
+    if (/shoot|shooter|gun|fps|sniper|bullet|weapon|rifle|blast|aim|strike|1v1|krunker|doom/i.test(lower)) return 'Shooter';
+    if (/race|racing|drift|drive|driver|car|speed|kart|vehicle|traffic|highway|road|slow roads|hexgl/i.test(lower)) return 'Racing';
+    if (/sport|sports|ball|soccer|football|basket|golf|tennis|baseball|hockey|skate|retro bowl/i.test(lower)) return 'Sports';
+    if (/horror|creepy|spooky|scary|fnaf|slender|zombie|haunt|nightmare|escape/i.test(lower)) return 'Horror';
+    if (/idle|clicker|tycoon|incremental|tap|cookie/i.test(lower)) return 'Idle';
+    if (/puzzle|2048|tetris|match|block|sudoku|chess|wordle|minesweeper|cut the rope|physics|logic/i.test(lower)) return 'Puzzle';
+    if (/platform|platformer|jump|runner|run|climb|vex|geometry dash|ovo|doodle|mario|sonic/i.test(lower)) return 'Platformer';
+    if (/strategy|defense|tower|card|tactics|bloons|deck|kingdom/i.test(lower)) return 'Strategy';
+    if (/rpg|quest|adventure|dungeon|pokemon|zelda|final fantasy|craft/i.test(lower)) return 'RPG';
+    if (/retro|pacman|pac-man|space invaders|galaga|asteroids|pong|atari|nes|gba|pixel/i.test(lower)) return 'Retro';
+    if (/slope|action|dodge|chaos|rush/i.test(lower)) return 'Action';
     return 'Arcade';
   }
 
@@ -2818,8 +2828,22 @@
     }
 
     // Static hosting fallback
-    const idbGames = await idbGetGames();
-    allGames = idbGames;
+    let idbGames = await idbGetGames();
+    if (!idbGames || idbGames.length === 0) {
+      try {
+        const staticRes = await fetch('/data/games.json');
+        if (staticRes.ok) {
+          const defaultList = await staticRes.json();
+          if (Array.isArray(defaultList) && defaultList.length > 0) {
+            idbGames = defaultList;
+            for (const g of defaultList) {
+              await idbPutGame(g);
+            }
+          }
+        }
+      } catch {}
+    }
+    allGames = idbGames || [];
     renderGames();
     checkInitialGameRoute();
   }
