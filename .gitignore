@@ -4,6 +4,8 @@ uploads/games/*
 !uploads/games/.gitkeep
 !uploads/games/game-wbwwb/
 !uploads/games/game-wbwwb/**
+!uploads/games/game-polytrack/
+!uploads/games/game-polytrack/**
 uploads/covers/*
 !uploads/covers/.gitkeep
 .env
