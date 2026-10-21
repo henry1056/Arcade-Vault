@@ -452,6 +452,20 @@
 
   const DEFAULT_GAMES = [
   {
+    "id": "game-polytrack",
+    "title": "Polytrack",
+    "category": "Arcade",
+    "author": "Kodub",
+    "description": "Fast-paced low-poly track racing game. Race against the clock, customize cars, construct custom stunt tracks, and beat global leaderboards.",
+    "sourceType": "itchio",
+    "sourceRepo": "https://kodub.itch.io/polytrack",
+    "sourceDir": "uploads/games/game-polytrack",
+    "sourcePath": "index.html",
+    "playUrl": "/uploads/games/game-polytrack/index.html",
+    "coverUrl": "https://img.itch.zone/aW1nLzI2MDUxNTMzLnBuZw==/315x250%23c/ZmLjX4.png",
+    "createdAt": "2026-10-21T07:33:00.000Z"
+  },
+  {
     "id": "game-iron-snout",
     "title": "Iron Snout",
     "category": "Fighting",
@@ -2450,6 +2464,102 @@
     });
   }
 
+  // Resolve optimal playable URL (local ripped bundle or direct embed)
+  function resolveGamePlayUrl(game) {
+    if (!game) return '';
+    const id = String(game.id || '').toLowerCase();
+    const title = String(game.title || '').toLowerCase();
+    const playUrl = String(game.playUrl || '').trim();
+    const repo = String(game.sourceRepo || '').toLowerCase();
+
+    // 1. Check Polytrack (fully ripped into /uploads/games/game-polytrack/)
+    if (
+      id === 'game-polytrack' ||
+      title === 'polytrack' ||
+      playUrl.includes('game-polytrack') ||
+      playUrl.includes('kodub.itch.io/polytrack') ||
+      repo.includes('kodub.itch.io/polytrack')
+    ) {
+      return '/uploads/games/game-polytrack/index.html';
+    }
+
+    // 2. Check We Become What We Behold
+    if (
+      id === 'game-wbwwb' ||
+      title.includes('we become what we behold') ||
+      playUrl.includes('game-wbwwb') ||
+      playUrl.includes('ncase.itch.io/wbwwb') ||
+      repo.includes('ncase.itch.io/wbwwb')
+    ) {
+      return '/uploads/games/game-wbwwb/index.html';
+    }
+
+    return playUrl;
+  }
+
+  // Graceful fallback for games blocked by iframe security headers (e.g. unripped itch store pages)
+  function setIframeFallback(game, fallbackUrl) {
+    if (!gamePageIframe) return;
+    if (gamePageLoader) gamePageLoader.hidden = true;
+    gamePageIframe.removeAttribute('src');
+    gamePageIframe.srcdoc = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body {
+            margin: 0;
+            padding: 2.5rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 85vh;
+            background: #0b0f19;
+            color: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            text-align: center;
+            box-sizing: border-box;
+          }
+          .icon { font-size: 3rem; margin-bottom: 1rem; }
+          h2 { margin: 0 0 0.5rem; font-size: 1.6rem; color: #38bdf8; font-weight: 700; }
+          p { margin: 0 0 1.5rem; color: #94a3b8; max-width: 480px; font-size: 1rem; line-height: 1.6; }
+          .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.85rem 1.75rem;
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 9999px;
+            font-weight: 600;
+            font-size: 1rem;
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+            transition: all 0.2s ease;
+          }
+          .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5);
+          }
+          .hint { margin-top: 1.25rem; font-size: 0.8rem; color: #64748b; }
+        </style>
+      </head>
+      <body>
+        <div class="icon">🎮</div>
+        <h2>${escapeHtml(game.title || 'Play Game')}</h2>
+        <p>This indie title uses an external player sandbox. Launch it below to play instantly in full screen!</p>
+        <a href="${escapeHtml(fallbackUrl)}" target="_blank" rel="noopener noreferrer" class="btn">
+          <span>🚀 Launch External Game Player</span>
+        </a>
+        <div class="hint">Ad-free direct embed launcher</div>
+      </body>
+      </html>
+    `;
+  }
+
   // Dedicated Game Page Navigation & View Controller
   function showGamePageView(game, pushHistory = true) {
     if (!game) return;
@@ -2463,6 +2573,12 @@
     if (gamePageCrumbCategory) gamePageCrumbCategory.textContent = game.category || 'Arcade';
     if (gamePageCrumbTitle) gamePageCrumbTitle.textContent = game.title;
 
+    // Resolve optimal playable URL (self-hosted / ripped build if available)
+    const resolvedUrl = resolveGamePlayUrl(game);
+    if (resolvedUrl && resolvedUrl !== game.playUrl) {
+      game.playUrl = resolvedUrl;
+    }
+
     // Toolbar buttons
     if (gamePageNewtabLink) gamePageNewtabLink.href = game.playUrl || '#';
     if (gamePageTroubleshootLink) gamePageTroubleshootLink.href = game.playUrl || '#';
@@ -2474,6 +2590,7 @@
 
     // Launch Game in Iframe
     if (gamePageIframe) {
+      if (gamePageLoader) gamePageLoader.hidden = false;
       if (game.htmlContent) {
         try {
           const blob = new Blob([game.htmlContent], { type: 'text/html' });
@@ -2482,7 +2599,36 @@
           gamePageIframe.srcdoc = game.htmlContent;
         }
       } else {
-        gamePageIframe.src = game.playUrl || 'about:blank';
+        const targetUrl = game.playUrl || 'about:blank';
+        // Check if this is a raw itch.io store page that cannot be framed
+        if (targetUrl.includes('.itch.io/') && !targetUrl.includes('.itch.zone/')) {
+          gamePageIframe.removeAttribute('srcdoc');
+          gamePageIframe.src = 'about:blank';
+          fetch(`/api/resolve-itch?url=${encodeURIComponent(targetUrl)}`)
+            .then((res) => {
+              if (!res.ok) throw new Error('Failed to resolve');
+              return res.json();
+            })
+            .then((data) => {
+              if (data && data.playUrl) {
+                game.playUrl = data.playUrl;
+                if (currentPlayingGame && currentPlayingGame.id === game.id) {
+                  gamePageIframe.src = data.playUrl;
+                  if (gamePageNewtabLink) gamePageNewtabLink.href = data.playUrl;
+                  if (gamePageTroubleshootLink) gamePageTroubleshootLink.href = data.playUrl;
+                }
+                try { idbSaveGame(game); } catch {}
+              } else {
+                setIframeFallback(game, targetUrl);
+              }
+            })
+            .catch(() => {
+              setIframeFallback(game, targetUrl);
+            });
+        } else {
+          gamePageIframe.removeAttribute('srcdoc');
+          gamePageIframe.src = targetUrl;
+        }
       }
     }
 
@@ -2578,9 +2724,17 @@
     });
   }
 
+  if (gamePageIframe && gamePageLoader) {
+    gamePageIframe.addEventListener('load', () => {
+      gamePageLoader.hidden = true;
+    });
+  }
+
   if (gamePageReloadBtn) {
     gamePageReloadBtn.addEventListener('click', () => {
       if (currentPlayingGame && gamePageIframe) {
+        if (gamePageLoader) gamePageLoader.hidden = false;
+        const playUrl = resolveGamePlayUrl(currentPlayingGame);
         if (currentPlayingGame.htmlContent) {
           try {
             const blob = new Blob([currentPlayingGame.htmlContent], { type: 'text/html' });
@@ -2588,8 +2742,23 @@
           } catch {
             gamePageIframe.srcdoc = currentPlayingGame.htmlContent;
           }
+        } else if (playUrl.includes('.itch.io/') && !playUrl.includes('.itch.zone/')) {
+          fetch(`/api/resolve-itch?url=${encodeURIComponent(playUrl)}`)
+            .then((res) => res.json())
+            .then((data) => {
+              if (data && data.playUrl) {
+                gamePageIframe.removeAttribute('srcdoc');
+                gamePageIframe.src = data.playUrl;
+              } else {
+                setIframeFallback(currentPlayingGame, playUrl);
+              }
+            })
+            .catch(() => {
+              setIframeFallback(currentPlayingGame, playUrl);
+            });
         } else {
-          gamePageIframe.src = currentPlayingGame.playUrl || 'about:blank';
+          gamePageIframe.removeAttribute('srcdoc');
+          gamePageIframe.src = playUrl || 'about:blank';
         }
       }
     });
@@ -3285,6 +3454,27 @@
       if (!existingIdSet.has(catalogGame.id)) {
         idbGames.push(catalogGame);
         try { await idbSaveGame(catalogGame); } catch {}
+      } else {
+        const existing = idbGames.find((g) => g.id === catalogGame.id);
+        if (existing && catalogGame.playUrl && catalogGame.playUrl.startsWith('/uploads/') && existing.playUrl !== catalogGame.playUrl) {
+          existing.playUrl = catalogGame.playUrl;
+          existing.sourceDir = catalogGame.sourceDir || existing.sourceDir;
+          existing.sourcePath = catalogGame.sourcePath || existing.sourcePath;
+          try { await idbSaveGame(existing); } catch {}
+        }
+      }
+    }
+
+    // Sanitize any existing games in IndexedDB that map to local ripped builds (e.g. Polytrack)
+    for (const g of idbGames) {
+      const fixedUrl = resolveGamePlayUrl(g);
+      if (fixedUrl && fixedUrl !== g.playUrl) {
+        g.playUrl = fixedUrl;
+        if (fixedUrl.includes('game-polytrack')) {
+          g.sourceDir = 'uploads/games/game-polytrack';
+          g.sourcePath = 'index.html';
+        }
+        try { await idbSaveGame(g); } catch {}
       }
     }
 
@@ -3640,26 +3830,48 @@
             const category = inferCategoryFromTitle(title, defaultCategory);
             const coverUrl = generateGameCoverSvg(title, category);
 
+            let gameId = crypto.randomUUID();
+            let playUrl = url;
+            let sourceDir = '';
+            let sourcePath = '';
+
+            if (url.includes('polytrack')) {
+              gameId = 'game-polytrack';
+              playUrl = '/uploads/games/game-polytrack/index.html';
+              sourceDir = 'uploads/games/game-polytrack';
+              sourcePath = 'index.html';
+            } else if (url.includes('wbwwb')) {
+              gameId = 'game-wbwwb';
+              playUrl = '/uploads/games/game-wbwwb/index.html';
+              sourceDir = 'uploads/games/game-wbwwb';
+              sourcePath = 'index.html';
+            }
+
             const newGame = {
-              id: crypto.randomUUID(),
+              id: gameId,
               title,
               category,
               author: 'itch.io Creator',
               description: `Imported from itch.io (${url})`,
               sourceType: 'itchio',
               sourceRepo: url,
-              sourceDir: '',
-              sourcePath: '',
-              playUrl: url,
+              sourceDir,
+              sourcePath,
+              playUrl,
               coverUrl,
               createdAt: new Date().toISOString()
             };
 
-            allGames.unshift(newGame);
+            const existingIdx = allGames.findIndex((g) => g.id === newGame.id || g.sourceRepo === url);
+            if (existingIdx !== -1) {
+              allGames[existingIdx] = newGame;
+            } else {
+              allGames.unshift(newGame);
+            }
             await idbPutGame(newGame);
             sessionImportedIds.push(newGame.id);
             totalImportedCount++;
-            appendItchConsole(`✅ Added "${title}" as external web game`, 'success');
+            appendItchConsole(`✅ Added "${title}" to library`, 'success');
           }
 
           renderGames();

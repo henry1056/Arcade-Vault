@@ -1579,6 +1579,75 @@ async function ripItchGameCode(itchUrl, tempGameDir, targetGameDir, sendEvent) {
   throw new Error('Unable to rip game code from itch.io. Game may be downloadable-only (non-HTML5) or requires a purchase.');
 }
 
+// GET /api/resolve-itch - Resolve direct embed/player iframe for an itch.io game
+app.get('/api/resolve-itch', async (req, res) => {
+  const itchUrl = String(req.query.url || '').trim();
+  if (!itchUrl) {
+    return res.status(400).json({ error: 'Valid URL is required.' });
+  }
+
+  // Check known local builds
+  if (itchUrl.includes('polytrack')) {
+    return res.json({
+      playUrl: '/uploads/games/game-polytrack/index.html',
+      isLocal: true,
+      title: 'Polytrack'
+    });
+  }
+  if (itchUrl.includes('wbwwb')) {
+    return res.json({
+      playUrl: '/uploads/games/game-wbwwb/index.html',
+      isLocal: true,
+      title: 'We Become What We Behold'
+    });
+  }
+
+  try {
+    const pageRes = await fetch(itchUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      }
+    });
+    if (!pageRes.ok) {
+      return res.status(404).json({ error: 'Game page not found.' });
+    }
+    const html = await pageRes.text();
+    let playerUrl = null;
+
+    // 1. Check data-iframe attribute
+    const dataIframeMatch = html.match(/data-iframe="([^"]+)"/i);
+    if (dataIframeMatch) {
+      const unescaped = dataIframeMatch[1]
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+      const srcMatch = unescaped.match(/src="([^"]+)"/i);
+      if (srcMatch) playerUrl = srcMatch[1];
+    }
+
+    // 2. Check direct itch.zone or hwcdn iframe in HTML
+    if (!playerUrl) {
+      const zoneMatch = html.match(/https:\/\/(?:[a-zA-Z0-9-]+\.)?(?:itch\.zone|ssl\.hwcdn\.net)\/html\/\d+\/(?:index\.html)?(?:\?[^"'<>\s]*)?/i);
+      if (zoneMatch) playerUrl = zoneMatch[0];
+    }
+
+    if (playerUrl) {
+      return res.json({
+        playUrl,
+        isLocal: false,
+        sourceRepo: itchUrl
+      });
+    }
+
+    return res.status(404).json({ error: 'No playable HTML5 embed found on page.' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/admin/import-itchio - Import free HTML5 web games from itch.io via itchio-downloader (Admin Only)
 app.post('/api/admin/import-itchio', requireAdmin, async (req, res) => {
   const {

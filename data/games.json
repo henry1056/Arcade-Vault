@@ -1,5 +1,19 @@
 [
   {
+    "id": "game-polytrack",
+    "title": "Polytrack",
+    "category": "Arcade",
+    "author": "Kodub",
+    "description": "Fast-paced low-poly track racing game. Race against the clock, customize cars, construct custom stunt tracks, and beat global leaderboards.",
+    "sourceType": "itchio",
+    "sourceRepo": "https://kodub.itch.io/polytrack",
+    "sourceDir": "uploads/games/game-polytrack",
+    "sourcePath": "index.html",
+    "playUrl": "/uploads/games/game-polytrack/index.html",
+    "coverUrl": "https://img.itch.zone/aW1nLzI2MDUxNTMzLnBuZw==/315x250%23c/ZmLjX4.png",
+    "createdAt": "2026-10-21T07:33:00.000Z"
+  },
+  {
     "id": "game-iron-snout",
     "title": "Iron Snout",
     "category": "Fighting",
