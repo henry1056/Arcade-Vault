@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const AdmZip = require('adm-zip');
-const { downloadGame } = require('itchio-downloader');
+const { downloadGame, downloadGameHtml5, downloadGameDirect } = require('itchio-downloader');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -1318,6 +1318,237 @@ app.post('/api/admin/mass-import-github', requireAdmin, async (req, res) => {
 });
 
 
+
+// Crawl and rip HTML5 game assets (index.html, JS, WASM, CSS, audio, textures) into targetDir
+async function ripHtml5GameFromIndexUrl(indexUrl, targetDir, onLog = () => {}, onProgress = () => {}) {
+  const parsedUrl = new URL(indexUrl);
+  const baseUrl = new URL('./', parsedUrl);
+
+  onLog(`Fetching entry index.html from ${indexUrl}...`);
+  const res = await fetch(indexUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+    }
+  });
+  if (!res.ok) throw new Error(`Failed to fetch index.html: HTTP ${res.status}`);
+  const htmlContent = await res.text();
+
+  if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+  fs.writeFileSync(path.join(targetDir, 'index.html'), htmlContent, 'utf8');
+
+  // Discover relative asset paths from HTML
+  const assetRegex = /(?:src|href|data)\s*=\s*["']([^"']+)["']/gi;
+  const discovered = new Set();
+  let m;
+  while ((m = assetRegex.exec(htmlContent)) !== null) {
+    const rawRef = m[1].trim();
+    if (!rawRef || rawRef.startsWith('data:') || rawRef.startsWith('#') || rawRef.startsWith('javascript:')) continue;
+    try {
+      const resolved = new URL(rawRef, baseUrl);
+      if (resolved.origin === baseUrl.origin && resolved.pathname.startsWith(baseUrl.pathname)) {
+        const rel = resolved.pathname.slice(baseUrl.pathname.length);
+        if (rel && !rel.endsWith('/')) {
+          discovered.add(rel.replace(/^\/+/, ''));
+        }
+      }
+    } catch {}
+  }
+
+  // Scan JS files for referenced media/WASM/asset files
+  const jsFiles = [...discovered].filter((f) => f.endsWith('.js'));
+  const assetExts = /\.(png|jpg|jpeg|gif|svg|webp|mp3|ogg|wav|m4a|flac|json|xml|atlas|fnt|wasm|css|glsl|vert|frag|bin|dat|tmx|tsx|mem|data)$/i;
+
+  for (const jsRel of jsFiles) {
+    try {
+      const jsUrl = new URL(jsRel, baseUrl).toString();
+      const jsRes = await fetch(jsUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      });
+      if (jsRes.ok) {
+        const jsText = await jsRes.text();
+        const matches = jsText.match(/["']([a-zA-Z0-9_\-\./\\]+\.[a-zA-Z0-9]{2,5})["']/g) || [];
+        for (const raw of matches) {
+          const clean = raw.slice(1, -1).trim().replace(/\\/g, '/').replace(/^\/+/, '');
+          if (assetExts.test(clean) && !clean.includes('://')) {
+            try {
+              const resUrl = new URL(clean, baseUrl);
+              if (resUrl.origin === baseUrl.origin && resUrl.pathname.startsWith(baseUrl.pathname)) {
+                discovered.add(resUrl.pathname.slice(baseUrl.pathname.length).replace(/^\/+/, ''));
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+  }
+
+  let downloadedCount = 1; // index.html
+  const allList = [...discovered];
+  onLog(`Discovered ${allList.length} asset(s) to rip. Downloading game files...`);
+
+  for (let i = 0; i < allList.length; i++) {
+    const assetPath = allList[i];
+    const assetLocalPath = path.join(targetDir, assetPath.replace(/\//g, path.sep));
+    const assetLocalDir = path.dirname(assetLocalPath);
+    if (!fs.existsSync(assetLocalDir)) fs.mkdirSync(assetLocalDir, { recursive: true });
+
+    try {
+      const fileUrl = new URL(assetPath, baseUrl).toString();
+      const fileRes = await fetch(fileUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      });
+      if (fileRes.ok) {
+        const buffer = Buffer.from(await fileRes.arrayBuffer());
+        fs.writeFileSync(assetLocalPath, buffer);
+        downloadedCount++;
+      }
+    } catch (err) {
+      // non-critical asset skip
+    }
+    onProgress(i + 1, allList.length);
+  }
+
+  return { downloadedCount, entryPath: 'index.html' };
+}
+
+// Multi-tier game code ripper for itch.io games
+async function ripItchGameCode(itchUrl, tempGameDir, targetGameDir, sendEvent) {
+  sendEvent('log', { level: 'info', message: `⚡ Initializing game code ripper for ${itchUrl}...` });
+
+  let pageHtml = '';
+  const pageMeta = {};
+
+  try {
+    const pageRes = await fetch(itchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      }
+    });
+    if (pageRes.ok) {
+      pageHtml = await pageRes.text();
+      const titleMatch = pageHtml.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i) || pageHtml.match(/<title>([^<]+)<\/title>/i);
+      const imageMatch = pageHtml.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i) || pageHtml.match(/<meta\s+name="twitter:image"\s+content="([^"]+)"/i);
+      const descMatch = pageHtml.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i);
+      const authorMatch = pageHtml.match(/<meta\s+name="author"\s+content="([^"]+)"/i) || pageHtml.match(/class="game_info_panel_widget"[^>]*>[\s\S]*?<td>Author<\/td>\s*<td><a[^>]*>([^<]+)<\/a>/i);
+
+      if (titleMatch) pageMeta.title = titleMatch[1].replace(/by\s+.*$/i, '').trim();
+      if (imageMatch) pageMeta.coverImage = imageMatch[1];
+      if (descMatch) pageMeta.description = descMatch[1].trim();
+      if (authorMatch) pageMeta.author = authorMatch[1].trim();
+    }
+  } catch (err) {
+    // Network lookup fallback
+  }
+
+  // Tier 1: Try official itchio-downloader downloadGameHtml5
+  sendEvent('log', { level: 'info', message: '📥 Ripping HTML5 game code via itchio-downloader...' });
+  let html5Result = null;
+  try {
+    html5Result = await downloadGameHtml5({
+      itchGameUrl: itchUrl,
+      downloadDirectory: tempGameDir,
+      writeMetaData: true,
+      onProgress: (p) => {
+        if (p.totalBytes && p.bytesReceived) {
+          const pct = Math.round((p.bytesReceived / p.totalBytes) * 100);
+          sendEvent('download_progress', { bytesReceived: p.bytesReceived, totalBytes: p.totalBytes, percent: pct });
+        }
+      }
+    });
+  } catch (err) {}
+
+  if (html5Result && html5Result.status && fs.existsSync(tempGameDir)) {
+    const subdirs = fs.readdirSync(tempGameDir);
+    let sourceDir = tempGameDir;
+    if (subdirs.length === 1 && fs.statSync(path.join(tempGameDir, subdirs[0])).isDirectory()) {
+      sourceDir = path.join(tempGameDir, subdirs[0]);
+    }
+    if (!fs.existsSync(targetGameDir)) fs.mkdirSync(targetGameDir, { recursive: true });
+    fs.cpSync(sourceDir, targetGameDir, { recursive: true });
+    const found = findEntryHtml(targetGameDir);
+    if (found) {
+      const fileCount = html5Result.html5Assets?.length || 1;
+      sendEvent('log', { level: 'success', message: `✅ Ripped ${fileCount} game file(s) into local storage.` });
+      return {
+        entryRelPath: found,
+        meta: { ...pageMeta, ...(html5Result.metaData || {}) },
+        fileCount
+      };
+    }
+  }
+
+  // Tier 2: Check for embedded itch.zone / hwcdn iframe URL in page HTML
+  let iframeUrl = null;
+  if (pageHtml) {
+    const unescaped = pageHtml.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+    const iframeMatch = unescaped.match(/https:\/\/(?:[a-zA-Z0-9-]+\.)?(?:itch\.zone|ssl\.hwcdn\.net)\/html\/\d+\/(?:index\.html)?(?:\?[^"'<>\s]*)?/i);
+    if (iframeMatch) {
+      iframeUrl = iframeMatch[0];
+      if (!iframeUrl.includes('index.html')) {
+        iframeUrl = iframeUrl.replace(/\/+$/, '') + '/index.html';
+      }
+    } else {
+      const dataIframeMatch = pageHtml.match(/data-iframe="([^"]+)"/i);
+      if (dataIframeMatch) {
+        const decoded = dataIframeMatch[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+        const srcMatch = decoded.match(/src="([^"]+)"/i);
+        if (srcMatch) iframeUrl = srcMatch[1];
+      }
+    }
+  }
+
+  if (iframeUrl) {
+    sendEvent('log', { level: 'info', message: `🎯 Found embedded HTML5 player: ${iframeUrl}` });
+    sendEvent('log', { level: 'info', message: '📥 Ripping game bundle & assets (scripts, WASM, audio, textures)...' });
+
+    const ripResult = await ripHtml5GameFromIndexUrl(
+      iframeUrl,
+      targetGameDir,
+      (msg) => sendEvent('log', { level: 'info', message: msg }),
+      (curr, total) => {
+        const pct = Math.round((curr / total) * 100);
+        sendEvent('download_progress', { current: curr, total, percent: pct });
+      }
+    );
+
+    const found = findEntryHtml(targetGameDir);
+    if (found) {
+      sendEvent('log', { level: 'success', message: `✅ Ripped ${ripResult.downloadedCount} game file(s) into local storage.` });
+      return {
+        entryRelPath: found,
+        meta: pageMeta,
+        fileCount: ripResult.downloadedCount
+      };
+    }
+  }
+
+  // Tier 3: Direct downloadable zip package
+  sendEvent('log', { level: 'info', message: '📦 Checking for downloadable web zip package on itch.io...' });
+  try {
+    const directResult = await downloadGameDirect({
+      itchGameUrl: itchUrl,
+      downloadDirectory: tempGameDir
+    });
+    if (directResult && directResult.status && directResult.filePath && directResult.filePath.endsWith('.zip')) {
+      sendEvent('log', { level: 'info', message: 'Extracting downloaded game zip archive...' });
+      const zip = new AdmZip(directResult.filePath);
+      if (!fs.existsSync(targetGameDir)) fs.mkdirSync(targetGameDir, { recursive: true });
+      zip.extractAllTo(targetGameDir, true);
+      const found = findEntryHtml(targetGameDir);
+      if (found) {
+        return {
+          entryRelPath: found,
+          meta: { ...pageMeta, ...(directResult.metaData || {}) },
+          fileCount: fs.readdirSync(targetGameDir).length
+        };
+      }
+    }
+  } catch (err) {}
+
+  throw new Error('Unable to rip game code from itch.io. Game may be downloadable-only (non-HTML5) or requires a purchase.');
+}
+
 // POST /api/admin/import-itchio - Import free HTML5 web games from itch.io via itchio-downloader (Admin Only)
 app.post('/api/admin/import-itchio', requireAdmin, async (req, res) => {
   const {
@@ -1404,66 +1635,13 @@ app.post('/api/admin/import-itchio', requireAdmin, async (req, res) => {
       const tempGameDir = path.join(TMP_DIR, `itch-${gameId}`);
       if (!fs.existsSync(tempGameDir)) fs.mkdirSync(tempGameDir, { recursive: true });
 
-      sendEvent('log', {
-        level: 'info',
-        message: 'Scraping HTML5 web assets from itch.io...'
-      });
-
-      let downloadResult;
-      try {
-        downloadResult = await downloadGame({
-          itchGameUrl: itchUrl,
-          html5: true,
-          downloadDirectory: tempGameDir,
-          retries: 2,
-          onProgress: (p) => {
-            if (p.totalBytes && p.bytesReceived) {
-              const pct = Math.round((p.bytesReceived / p.totalBytes) * 100);
-              sendEvent('download_progress', { bytesReceived: p.bytesReceived, totalBytes: p.totalBytes, percent: pct });
-            }
-          }
-        });
-      } catch (err) {
-        downloadResult = await downloadGame({
-          itchGameUrl: itchUrl,
-          downloadDirectory: tempGameDir,
-          retries: 2
-        });
-      }
-
-      if (!downloadResult || (!downloadResult.status && !downloadResult.filePath)) {
-        throw new Error(downloadResult?.message || 'Failed to download game from itch.io.');
-      }
-
-      if (!fs.existsSync(targetGameDir)) fs.mkdirSync(targetGameDir, { recursive: true });
-
-      let entryRelPath = 'index.html';
-
-      if (downloadResult.filePath && downloadResult.filePath.endsWith('.zip')) {
-        sendEvent('log', { level: 'info', message: 'Extracting downloaded game zip archive...' });
-        const zip = new AdmZip(downloadResult.filePath);
-        zip.extractAllTo(targetGameDir, true);
-        const found = findEntryHtml(targetGameDir);
-        if (!found) {
-          throw new Error('Downloaded zip archive did not contain an index.html file for web play.');
-        }
-        entryRelPath = found;
-      } else {
-        const subdirs = fs.readdirSync(tempGameDir);
-        let sourceDir = tempGameDir;
-        if (subdirs.length === 1 && fs.statSync(path.join(tempGameDir, subdirs[0])).isDirectory()) {
-          sourceDir = path.join(tempGameDir, subdirs[0]);
-        }
-        fs.cpSync(sourceDir, targetGameDir, { recursive: true });
-        const found = findEntryHtml(targetGameDir);
-        entryRelPath = found || 'index.html';
-      }
+      const ripData = await ripItchGameCode(itchUrl, tempGameDir, targetGameDir, sendEvent);
+      const entryRelPath = ripData.entryRelPath;
+      const meta = ripData.meta || {};
 
       try {
         fs.rmSync(tempGameDir, { recursive: true, force: true });
       } catch {}
-
-      const meta = downloadResult.metaData || {};
       const title = meta.title || formatSlugToTitle(meta.name || path.basename(itchUrl));
       const author = meta.authors?.[0]?.name || meta.author || 'itch.io Creator';
       const category = inferCategoryFromItch(title, meta.tags, defaultCategory);

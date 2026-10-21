@@ -461,7 +461,7 @@
     "sourceRepo": "snoutup/iron-snout",
     "sourceDir": "",
     "sourcePath": "",
-    "playUrl": "https://snoutup.itch.io/iron-snout",
+    "playUrl": "https://ironsnoutonline.github.io",
     "coverUrl": "https://img.itch.zone/aW1nLzU2OTg4NC5wbmc=/315x250%23c/eQc87c.png",
     "createdAt": "2026-10-20T23:55:00.000Z"
   },
@@ -475,7 +475,7 @@
     "sourceRepo": "playtouch/stickman-fighter",
     "sourceDir": "",
     "sourcePath": "",
-    "playUrl": "https://playtouch.itch.io/stickman-fighter-epic-battle",
+    "playUrl": "https://html5.gamedistribution.com/b91615ae558c4b4caab812eb3c02fa9e/",
     "coverUrl": "https://ts4.mm.bing.net/th?id=OIP.kgeMWQ73I1hPP4xpbsSryAHaHa&pid=15.1",
     "createdAt": "2026-10-20T23:54:00.000Z"
   },
@@ -597,11 +597,11 @@
     "category": "Platformer",
     "author": "Nicky Case!",
     "description": "A thought-provoking 5-minute game about news cycles, vicious cycles, and infinite cycles. Capture moments with your camera to see how the crowd reacts.",
-    "sourceType": "url",
-    "sourceRepo": "ncase/wbwwb",
-    "sourceDir": "",
-    "sourcePath": "",
-    "playUrl": "https://ncase.me/wbwwb/",
+    "sourceType": "itchio",
+    "sourceRepo": "https://ncase.itch.io/wbwwb",
+    "sourceDir": "uploads/games/game-wbwwb",
+    "sourcePath": "index.html",
+    "playUrl": "/uploads/games/game-wbwwb/index.html",
     "coverUrl": "https://img.itch.zone/aW1hZ2UvOTIxMTUvNDU0MDMxLnBuZw==/315x250%23c/cxthdQ.png",
     "createdAt": "2026-10-20T23:45:00.000Z"
   },
@@ -3577,15 +3577,16 @@
 
       const defaultCategory = itchCategorySelect?.value || 'Auto';
       const autoPickFirstIcon = itchAutoIcon?.checked !== false;
+      const ripGameCode = document.getElementById('itch-rip-code')?.checked !== false;
 
       startItchImportBtn.disabled = true;
-      startItchImportBtn.textContent = '⏳ Downloading & Extracting...';
+      startItchImportBtn.textContent = '⚡ Ripping Game Code...';
       itchProgressSection.hidden = false;
       itchProgressBar.value = 0;
       itchProgressPercent.textContent = '0%';
-      itchStatusLabel.textContent = `Initiating itch.io download for ${lines.length} game(s)...`;
+      itchStatusLabel.textContent = `Ripping game code & assets for ${lines.length} game(s)...`;
       itchConsole.innerHTML = '';
-      appendItchConsole(`Connecting to itch.io for ${lines.length} game URL(s)... [itchio-downloader]`, 'info');
+      appendItchConsole(`⚡ Initiating game code ripper for ${lines.length} game URL(s)... [itchio-downloader]`, 'info');
 
       let totalImportedCount = 0;
       let totalSkippedCount = 0;
@@ -3606,7 +3607,8 @@
             body: JSON.stringify({
               urls: lines,
               defaultCategory,
-              autoPickFirstIcon
+              autoPickFirstIcon,
+              ripGameCode
             })
           });
         } catch (netErr) {
@@ -3655,7 +3657,7 @@
           itchProgressPercent.textContent = '100%';
           itchStatusLabel.textContent = `Finished! ${totalImportedCount} game(s) added.`;
           startItchImportBtn.disabled = false;
-          startItchImportBtn.textContent = '🚀 Download & Import from itch.io';
+          startItchImportBtn.textContent = '⚡ Rip Game Code & Import';
           return;
         }
 
@@ -3770,7 +3772,7 @@
         }
       } finally {
         startItchImportBtn.disabled = false;
-        startItchImportBtn.textContent = '🚀 Download & Import from itch.io';
+        startItchImportBtn.textContent = '⚡ Rip Game Code & Import';
         renderGames();
       }
     });

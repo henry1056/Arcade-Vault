@@ -1287,8 +1287,8 @@
   <dialog id="itch-import-dialog" class="modal-dialog itch-import-modal" closedby="any" aria-labelledby="itch-import-title">
     <div class="modal-header">
       <div class="modal-header-text">
-        <h2 id="itch-import-title">🎮 Import from itch.io</h2>
-        <span class="badge">Powered by itchio-downloader</span>
+        <h2 id="itch-import-title">⚡ Rip &amp; Import from itch.io</h2>
+        <span class="badge">Game Code Ripper &amp; Extractor</span>
       </div>
       <button
         type="button"
@@ -1307,7 +1307,7 @@
     <form id="itch-import-form" novalidate>
       <div class="modal-body">
         <p class="dialog-lead">
-          Download free games from <a href="https://itch.io" target="_blank" rel="noopener">itch.io</a> directly into Arcade Vault. Automatically downloads HTML5 web games, discovers assets, grabs the official itch.io cover art, and saves everything for offline play.
+          Rip and download full HTML5 game code from <a href="https://itch.io" target="_blank" rel="noopener">itch.io</a> directly into Arcade Vault. Scrapes the complete client-side game bundle (scripts, WASM, WebGL assets, audio, and styling) so games run 100% locally and offline without external embeds or ads.
         </p>
 
         <div class="field">
@@ -1353,6 +1353,10 @@
 
           <div class="field checkbox-field" style="align-self: center; margin-top: 1.25rem;">
             <label class="checkbox-label">
+              <input type="checkbox" id="itch-rip-code" name="ripCode" checked>
+              <span><strong>Rip Full Game Code</strong> (extracts index.html, JS, WASM &amp; assets for local self-hosting)</span>
+            </label>
+            <label class="checkbox-label" style="margin-top: 0.5rem;">
               <input type="checkbox" id="itch-auto-icon" name="autoIcon" checked>
               <span>Auto-save official itch.io cover art</span>
             </label>
@@ -1388,7 +1392,7 @@
           Cancel
         </button>
         <button type="submit" class="btn btn-primary" id="start-itch-import-btn">
-          🚀 Download &amp; Import from itch.io
+          ⚡ Rip Game Code &amp; Import
         </button>
       </div>
     </form>

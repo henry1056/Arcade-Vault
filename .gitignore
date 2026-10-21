@@ -2,6 +2,8 @@ node_modules/
 uploads/tmp/
 uploads/games/*
 !uploads/games/.gitkeep
+!uploads/games/game-wbwwb/
+!uploads/games/game-wbwwb/**
 uploads/covers/*
 !uploads/covers/.gitkeep
 .env
