@@ -1123,9 +1123,13 @@
   }
 
 
-  // Robust fallback icon search (Wikipedia API, iTunes API, and procedural SVG covers)
+  // Robust fallback icon search (Google Play, Wikipedia API, iTunes API, and procedural SVG covers)
   async function clientIconSearch(gameTitle, category = 'Arcade') {
-    const query = `${gameTitle} icon`;
+    const cleanTitle = String(gameTitle || '')
+      .replace(/\s*[\(\[](?:html5|web|js|v[\d\.]+|online|free)[\)\]]/gi, '')
+      .replace(/\s+(?:game\s+icon|icon|game)$/i, '')
+      .trim();
+    const query = `${cleanTitle} game icon`;
     const results = [];
     const seenUrls = new Set();
 
@@ -1215,9 +1219,11 @@
   // Transition from Step 1 (Upload) to Step 2 (Select Icon)
   async function enterSelectIconStep(createdGame) {
     pendingIconGame = createdGame;
-    const expectedQuery = /\bicon$/i.test(createdGame.title.trim())
-      ? createdGame.title.trim()
-      : `${createdGame.title.trim()} icon`;
+    const cleanTitle = String(createdGame.title || '')
+      .replace(/\s*[\(\[](?:html5|web|js|v[\d\.]+|online|free)[\)\]]/gi, '')
+      .replace(/\s+(?:game\s+icon|icon|game)$/i, '')
+      .trim();
+    const expectedQuery = `${cleanTitle} game icon`;
 
     uploadDialogTitle.textContent = `Select Icon — ${createdGame.title}`;
     stepTracker1.className = 'step-done';
@@ -1231,7 +1237,7 @@
     iconLoadingQuery.textContent = `"${expectedQuery}"`;
     const uploadOpenGoogleLink = document.getElementById('upload-open-google-images');
     if (uploadOpenGoogleLink) {
-      uploadOpenGoogleLink.href = `https://www.google.com/search?q=${encodeURIComponent(createdGame.title + ' game icon')}&tbm=isch`;
+      uploadOpenGoogleLink.href = `https://www.google.com/search?q=${encodeURIComponent(expectedQuery)}&tbm=isch`;
     }
     iconLoadingState.hidden = false;
     iconResultsFieldset.hidden = true;
@@ -3211,23 +3217,29 @@
         return;
       }
 
+      const cleanTitle = title
+        .replace(/\s*[\(\[](?:html5|web|js|v[\d\.]+|online|free)[\)\]]/gi, '')
+        .replace(/\s+(?:game\s+icon|icon|game)$/i, '')
+        .trim();
+      const searchTarget = `${cleanTitle} game icon`;
+
       if (editFormStatus) editFormStatus.hidden = true;
       editIconSearchSection.hidden = false;
-      editIconSearchStatus.textContent = 'Searching Google Images for "' + title + ' icon"...';
+      editIconSearchStatus.textContent = 'Searching Google Images for "' + searchTarget + '"...';
       editIconResultsGrid.innerHTML = '<div class="hint" style="grid-column: 1 / -1; text-align: center; padding: 1rem 0;">Searching...</div>';
       editSearchIconBtn.disabled = true;
 
       try {
         let data = null;
         try {
-          const res = await fetch('/api/admin/icon-search?q=' + encodeURIComponent(title));
+          const res = await fetch('/api/admin/icon-search?q=' + encodeURIComponent(searchTarget));
           if (res.ok) data = await res.json();
         } catch {
           // Fallback below
         }
 
         if (!data || !Array.isArray(data.results) || data.results.length === 0) {
-          data = await clientIconSearch(title);
+          data = await clientIconSearch(cleanTitle);
         }
 
         const results = (data && Array.isArray(data.results)) ? data.results.slice(0, 5) : [];
@@ -3238,7 +3250,7 @@
           return;
         }
 
-        editIconSearchStatus.textContent = 'Top ' + results.length + ' icon results for "' + (data.query || title + ' icon') + '":';
+        editIconSearchStatus.textContent = 'Top ' + results.length + ' icon results for "' + (data.query || searchTarget) + '":';
         editIconResultsGrid.innerHTML = '';
 
         results.forEach((item, index) => {
@@ -3724,8 +3736,11 @@
   const editBrowseGoogleBtn = document.getElementById('edit-browse-google-btn');
   if (editBrowseGoogleBtn) {
     editBrowseGoogleBtn.addEventListener('click', () => {
-      const title = editGameTitle?.value?.trim() || 'game';
-      const url = `https://www.google.com/search?q=${encodeURIComponent(title + ' game icon')}&tbm=isch`;
+      const cleanTitle = (editGameTitle?.value?.trim() || 'game')
+        .replace(/\s*[\(\[](?:html5|web|js|v[\d\.]+|online|free)[\)\]]/gi, '')
+        .replace(/\s+(?:game\s+icon|icon|game)$/i, '')
+        .trim();
+      const url = `https://www.google.com/search?q=${encodeURIComponent(cleanTitle + ' game icon')}&tbm=isch`;
       window.open(url, '_blank', 'noopener,noreferrer');
     });
   }

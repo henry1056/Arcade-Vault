@@ -201,12 +201,13 @@ function findEntryHtml(baseDir, currentDir = baseDir) {
   return null;
 }
 
-// Search top 5 game icons with multi-source fallback (DuckDuckGo, Bing, iTunes, Wikipedia, Google)
+// Search top 5 game icons with multi-source fallback (Google, DuckDuckGo, Bing, iTunes, Wikipedia)
 async function searchGameIcons(rawQuery) {
   const base = String(rawQuery || '')
     .replace(/\s*[\(\[](?:html5|web|js|v[\d\.]+|online|free)[\)\]]/gi, '')
+    .replace(/\s+(?:game\s+icon|icon|game)$/i, '')
     .trim();
-  const searchQuery = /\bicon$/i.test(base) ? base : `${base} icon`;
+  const searchQuery = `${base} game icon`;
   const results = [];
   const seen = new Set();
 
@@ -226,7 +227,7 @@ async function searchGameIcons(rawQuery) {
 
   // 1. Google Images (Official Google-hosted 512x512 game icons via googleusercontent.com CDN)
   try {
-    const googleUrl = `https://play.google.com/store/search?q=${encodeURIComponent(base)}&c=apps`;
+    const googleUrl = `https://play.google.com/store/search?q=${encodeURIComponent(searchQuery)}&c=apps`;
     const gRes = await fetch(googleUrl, {
       headers: {
         'User-Agent':
@@ -245,7 +246,7 @@ async function searchGameIcons(rawQuery) {
           addedBases.add(baseUri);
           const hdGoogleIcon = `${baseUri}=s512-rw`;
           const thumbGoogleIcon = `${baseUri}=s256-rw`;
-          addResult(hdGoogleIcon, thumbGoogleIcon, `${base} (Google Images)`);
+          addResult(hdGoogleIcon, thumbGoogleIcon, `${searchQuery} (Google)`);
           if (results.length >= 5) break;
         }
       }
@@ -256,7 +257,7 @@ async function searchGameIcons(rawQuery) {
 
   // 2. DuckDuckGo Image Search API (Fast, authentic game icons with direct CDN delivery)
   try {
-    const ddgPageUrl = `https://duckduckgo.com/?q=${encodeURIComponent(base + ' game icon')}&iax=images&ia=images`;
+    const ddgPageUrl = `https://duckduckgo.com/?q=${encodeURIComponent(searchQuery)}&iax=images&ia=images`;
     const ddgRes = await fetch(ddgPageUrl, {
       headers: {
         'User-Agent':
@@ -271,7 +272,7 @@ async function searchGameIcons(rawQuery) {
       if (vqdMatch) {
         const vqd = vqdMatch[1];
         const apiUrl = `https://duckduckgo.com/i.js?l=us-en&o=json&q=${encodeURIComponent(
-          base + ' game icon'
+          searchQuery
         )}&vqd=${vqd}&f=,,,`;
         const apiRes = await fetch(apiUrl, {
           headers: {
@@ -324,7 +325,7 @@ async function searchGameIcons(rawQuery) {
   if (results.length < 5) {
     try {
       const iRes = await fetch(
-        `https://itunes.apple.com/search?term=${encodeURIComponent(base)}&entity=software&limit=5`
+        `https://itunes.apple.com/search?term=${encodeURIComponent(searchQuery)}&entity=software&limit=5`
       );
       if (iRes.ok) {
         const iData = await iRes.json();
@@ -346,7 +347,7 @@ async function searchGameIcons(rawQuery) {
     try {
       const wikiRes = await fetch(
         `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(
-          base + ' video game'
+          searchQuery
         )}&gsrlimit=5&prop=pageimages&pithumbsize=512&format=json`
       );
       if (wikiRes.ok) {
