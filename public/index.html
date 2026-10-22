@@ -24,8 +24,21 @@
         <span class="brand-text">Arcade<span>Vault</span></span>
       </a>
 
-      <!-- Public header action for players to suggest games -->
+      <!-- Public header actions -->
       <div class="header-public-actions">
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm cloak-btn"
+          commandfor="cloak-dialog"
+          command="show-modal"
+          id="header-cloak-btn"
+          title="Disguise tab and open in unblockable about:blank"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+          🛡️ Cloak / Stealth
+        </button>
         <button
           type="button"
           class="btn btn-secondary btn-sm suggest-btn"
@@ -390,8 +403,8 @@
           id="game-page-iframe"
           class="game-page-iframe"
           title="Playable Web Game"
-          sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-modals allow-popups"
-          allow="fullscreen; autoplay; gamepad; clipboard-read; clipboard-write"
+          sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-modals allow-popups allow-downloads allow-presentation"
+          allow="fullscreen; autoplay; gamepad; clipboard-read; clipboard-write; cross-origin-isolated; microphone; camera; midi; xr-spatial-tracking"
         ></iframe>
 
         <div id="game-page-loader" class="game-page-stage-overlay" hidden>
@@ -964,8 +977,8 @@
       <iframe
         id="game-iframe"
         title="Playable Web Game"
-        sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-modals allow-popups"
-        allow="fullscreen; autoplay; gamepad"
+        sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-modals allow-popups allow-downloads allow-presentation"
+        allow="fullscreen; autoplay; gamepad; clipboard-read; clipboard-write; cross-origin-isolated; microphone; camera; midi; xr-spatial-tracking"
       ></iframe>
     </div>
 
@@ -1560,6 +1573,120 @@
         command="close"
       >
         Close
+      </button>
+    </div>
+  </dialog>
+
+  <!-- Cloak & Stealth Settings Dialog -->
+  <dialog id="cloak-dialog" class="modal-dialog cloak-modal" closedby="any" aria-labelledby="cloak-dialog-title">
+    <div class="modal-header">
+      <div class="modal-header-text">
+        <h2 id="cloak-dialog-title">🛡️ Stealth &amp; Tab Cloaking</h2>
+        <span class="badge">Bypass Filters &amp; Disguise Tab</span>
+      </div>
+      <button
+        type="button"
+        class="icon-btn"
+        commandfor="cloak-dialog"
+        command="close"
+        aria-label="Close stealth dialog"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="18" x2="18" y2="6"></line>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <!-- Section 1: about:blank Unblocker -->
+      <div class="cloak-section">
+        <h3>🚀 Open in about:blank (Filter Bypass)</h3>
+        <p class="dialog-lead" style="font-size: 0.88rem; margin-bottom: 0.85rem;">
+          Opens Arcade Vault inside an untraceable <code>about:blank</code> tab. School web filters (GoGuardian, Securly, Lightspeed) cannot inspect or log internal browser pages in your browsing history!
+        </p>
+        <button type="button" class="btn btn-primary" id="launch-about-blank-btn" style="width: 100%;">
+          🌐 Open Site in about:blank Tab
+        </button>
+      </div>
+
+      <!-- Section 2: Tab Cloak Disguises -->
+      <div class="cloak-section" style="margin-top: 1.25rem;">
+        <h3>🎭 Tab Disguise (Change Favicon &amp; Title)</h3>
+        <p class="dialog-lead" style="font-size: 0.88rem; margin-bottom: 0.85rem;">
+          Disguise the browser tab name and icon as educational tools so onlookers and tab scanners only see schoolwork:
+        </p>
+
+        <div class="cloak-presets-grid">
+          <button type="button" class="cloak-preset-btn" data-preset="classroom">
+            <img src="https://ssl.gstatic.com/classroom/favicon.png" alt="Google Classroom" width="24" height="24">
+            <div>
+              <strong>Google Classroom</strong>
+              <span>Home - Google Classroom</span>
+            </div>
+          </button>
+
+          <button type="button" class="cloak-preset-btn" data-preset="docs">
+            <img src="https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico" alt="Google Docs" width="24" height="24">
+            <div>
+              <strong>Google Docs</strong>
+              <span>Document - Google Docs</span>
+            </div>
+          </button>
+
+          <button type="button" class="cloak-preset-btn" data-preset="drive">
+            <img src="https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_32dp.png" alt="Google Drive" width="24" height="24">
+            <div>
+              <strong>Google Drive</strong>
+              <span>My Drive - Google Drive</span>
+            </div>
+          </button>
+
+          <button type="button" class="cloak-preset-btn" data-preset="canvas">
+            <img src="https://du11hjcvx0uqb.cloudfront.net/dist/images/favicon-e10d657a73.ico" alt="Canvas" width="24" height="24">
+            <div>
+              <strong>Canvas LMS</strong>
+              <span>Dashboard - Canvas</span>
+            </div>
+          </button>
+        </div>
+
+        <button type="button" class="btn btn-secondary btn-sm" id="reset-cloak-btn" style="margin-top: 0.85rem;">
+          Reset to Default ArcadeVault Title &amp; Icon
+        </button>
+      </div>
+
+      <!-- Section 3: Panic Key -->
+      <div class="cloak-section" style="margin-top: 1.25rem;">
+        <h3>🚨 Emergency Panic Key</h3>
+        <p class="dialog-lead" style="font-size: 0.88rem; margin-bottom: 0.85rem;">
+          Press the Panic Key at any time to instantly redirect this tab away to a safe educational site:
+        </p>
+        <div class="panic-key-row" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+          <label for="panic-key-select" style="font-size: 0.9rem; font-weight: 600;">Key:</label>
+          <select id="panic-key-select" style="padding: 0.45rem 0.65rem; border-radius: 6px; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border-subtle);">
+            <option value="`">` (Backtick / Tilde)</option>
+            <option value="Escape">Esc (Escape)</option>
+            <option value="]">] (Right Bracket)</option>
+          </select>
+          <label for="panic-url-select" style="font-size: 0.9rem; font-weight: 600;">Destination:</label>
+          <select id="panic-url-select" style="flex: 1; min-width: 180px; padding: 0.45rem 0.65rem; border-radius: 6px; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border-subtle);">
+            <option value="https://classroom.google.com">Google Classroom</option>
+            <option value="https://docs.google.com">Google Docs</option>
+            <option value="https://www.google.com">Google Search</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button
+        type="button"
+        class="btn btn-secondary"
+        commandfor="cloak-dialog"
+        command="close"
+      >
+        Done
       </button>
     </div>
   </dialog>

@@ -1927,6 +1927,76 @@ input.user-valid-fallback {
   flex-wrap: wrap;
 }
 
+/* Cloak & Stealth Modal */
+.cloak-modal {
+  max-width: 580px;
+  width: 95vw;
+}
+
+.cloak-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.15rem;
+}
+
+.cloak-section h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.05rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cloak-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+.cloak-preset-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.cloak-preset-btn:hover {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.08);
+  transform: translateY(-1px);
+}
+
+.cloak-preset-btn.active {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.14);
+}
+
+.cloak-preset-btn img {
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.cloak-preset-btn strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.cloak-preset-btn span {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
 [hidden] {
   display: none !important;
 }

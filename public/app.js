@@ -4391,4 +4391,143 @@
     });
   }
 
+  // ==========================================
+  // Cloaking & Filter Bypass (about:blank & Tab Disguise)
+  // ==========================================
+  const launchAboutBlankBtn = document.getElementById('launch-about-blank-btn');
+  const cloakPresetBtns = document.querySelectorAll('.cloak-preset-btn');
+  const resetCloakBtn = document.getElementById('reset-cloak-btn');
+  const panicKeySelect = document.getElementById('panic-key-select');
+  const panicUrlSelect = document.getElementById('panic-url-select');
+
+  const CLOAK_PRESETS = {
+    classroom: {
+      title: 'Home - Google Classroom',
+      favicon: 'https://ssl.gstatic.com/classroom/favicon.png'
+    },
+    docs: {
+      title: 'Document - Google Docs',
+      favicon: 'https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico'
+    },
+    drive: {
+      title: 'My Drive - Google Drive',
+      favicon: 'https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_32dp.png'
+    },
+    canvas: {
+      title: 'Dashboard - Canvas',
+      favicon: 'https://du11hjcvx0uqb.cloudfront.net/dist/images/favicon-e10d657a73.ico'
+    }
+  };
+
+  let activeCloakPreset = localStorage.getItem('arcade_cloak_preset') || null;
+  let panicKey = localStorage.getItem('arcade_panic_key') || '`';
+  let panicUrl = localStorage.getItem('arcade_panic_url') || 'https://classroom.google.com';
+
+  if (panicKeySelect) {
+    panicKeySelect.value = panicKey;
+    panicKeySelect.addEventListener('change', () => {
+      panicKey = panicKeySelect.value;
+      localStorage.setItem('arcade_panic_key', panicKey);
+    });
+  }
+
+  if (panicUrlSelect) {
+    panicUrlSelect.value = panicUrl;
+    panicUrlSelect.addEventListener('change', () => {
+      panicUrl = panicUrlSelect.value;
+      localStorage.setItem('arcade_panic_url', panicUrl);
+    });
+  }
+
+  function setFavicon(url) {
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = url;
+  }
+
+  function applyTabCloak(presetKey) {
+    const preset = CLOAK_PRESETS[presetKey];
+    if (!preset) return;
+    document.title = preset.title;
+    setFavicon(preset.favicon);
+    localStorage.setItem('arcade_cloak_preset', presetKey);
+    activeCloakPreset = presetKey;
+    cloakPresetBtns.forEach((b) => {
+      b.classList.toggle('active', b.dataset.preset === presetKey);
+    });
+  }
+
+  function resetTabCloak() {
+    activeCloakPreset = null;
+    localStorage.removeItem('arcade_cloak_preset');
+    document.title = currentPlayingGame ? `${currentPlayingGame.title} - ArcadeVault` : 'ArcadeVault - Free Web Games & Indie Arcade';
+    setFavicon('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="4" fill="%236366f1"/><path d="M6 12h4m-2-2v4" stroke="white" stroke-width="2"/></svg>');
+    cloakPresetBtns.forEach((b) => b.classList.remove('active'));
+  }
+
+  // Restore saved cloak on page load
+  if (activeCloakPreset && CLOAK_PRESETS[activeCloakPreset]) {
+    applyTabCloak(activeCloakPreset);
+  }
+
+  cloakPresetBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const presetKey = btn.dataset.preset;
+      applyTabCloak(presetKey);
+    });
+  });
+
+  if (resetCloakBtn) {
+    resetCloakBtn.addEventListener('click', resetTabCloak);
+  }
+
+  // about:blank unblocker launcher
+  if (launchAboutBlankBtn) {
+    launchAboutBlankBtn.addEventListener('click', () => {
+      const win = window.open('about:blank', '_blank');
+      if (!win) {
+        alert('Popup was blocked by your browser. Please allow popups for this site to open in about:blank.');
+        return;
+      }
+      const title = document.title || 'Classes';
+      const favicon = activeCloakPreset && CLOAK_PRESETS[activeCloakPreset] ? CLOAK_PRESETS[activeCloakPreset].favicon : 'https://ssl.gstatic.com/classroom/favicon.png';
+      const doc = win.document;
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>${title}</title>
+          <link rel="icon" href="${favicon}">
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0d14; }
+            iframe { width: 100%; height: 100%; border: none; outline: none; }
+          </style>
+        </head>
+        <body>
+          <iframe src="${window.location.href}" allow="fullscreen; autoplay; gamepad; cross-origin-isolated"></iframe>
+        </body>
+        </html>
+      `);
+      doc.close();
+      const cloakDialog = document.getElementById('cloak-dialog');
+      if (cloakDialog && typeof cloakDialog.close === 'function') cloakDialog.close();
+    });
+  }
+
+  // Emergency Panic Key Listener
+  window.addEventListener('keydown', (e) => {
+    if (e.target.matches('input, textarea, select')) return;
+    if (e.key === panicKey) {
+      e.preventDefault();
+      window.location.replace(panicUrl);
+    }
+  });
+
 })();
