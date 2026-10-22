@@ -4588,6 +4588,7 @@
       // Browser popup blocker stopped automatic window.open without gesture.
       // Reveal 1-click splash so user click immediately opens about:blank without pop-up blocking.
       autoCloakOverlay.hidden = false;
+      document.body.classList.add('auto-cloaking-active');
     }
   }
 
@@ -4602,6 +4603,7 @@
     autoCloakDismissBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (autoCloakOverlay) autoCloakOverlay.hidden = true;
+      document.body.classList.remove('auto-cloaking-active');
       sessionStorage.setItem('arcade_cloak_dismissed', 'true');
     });
   }

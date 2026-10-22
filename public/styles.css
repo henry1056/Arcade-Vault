@@ -1945,6 +1945,10 @@ input.user-valid-fallback {
   display: none !important;
 }
 
+body.auto-cloaking-active > *:not(.auto-cloak-overlay) {
+  visibility: hidden !important;
+}
+
 .auto-cloak-box {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);

@@ -3,7 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ArcadeVault — Web Game Portal</title>
+  <title>Home - Google Classroom</title>
+  <link rel="icon" href="https://ssl.gstatic.com/classroom/favicon.png">
+  <script>
+    (function() {
+      // 1. If nested inside an iframe (e.g. about:blank), we are already in the secure sandbox
+      if (window.self !== window.top) return;
+      // 2. Try instant launch in about:blank before DOM parses
+      try {
+        var win = window.open('about:blank', '_blank');
+        if (win && !win.closed && typeof win.closed !== 'undefined') {
+          var targetUrl = window.location.href;
+          var doc = win.document;
+          doc.open();
+          doc.write('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Home - Google Classroom</title><link rel="icon" href="https://ssl.gstatic.com/classroom/favicon.png"><style>*{margin:0;padding:0;box-sizing:border-box;}html,body{width:100%;height:100%;overflow:hidden;background:#0b0d14;}iframe{width:100%;height:100%;border:none;outline:none;display:block;}</style></head><body><iframe src="' + targetUrl + '" allow="fullscreen; autoplay; gamepad; cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; display-capture"></iframe></body></html>');
+          doc.close();
+          window.location.replace('https://classroom.google.com');
+        }
+      } catch (err) {}
+    })();
+  </script>
   <link rel="stylesheet" href="styles.css">
   <script type="module">
     if (!('commandForElement' in HTMLButtonElement.prototype)) {
@@ -12,23 +31,23 @@
   </script>
 </head>
 <body>
-  <!-- Auto-Cloak 1-Click Launch Splash (Shown if browser requires user gesture to open about:blank) -->
+  <!-- Discreet 1-Click Launch Splash (Shown if browser requires user click to open about:blank) -->
   <div id="auto-cloak-overlay" class="auto-cloak-overlay" hidden>
     <div class="auto-cloak-box">
-      <div class="auto-cloak-icon">🛡️</div>
-      <h2>Filter-Proof Launcher</h2>
+      <div class="auto-cloak-icon">📚</div>
+      <h2>Study & Practice Session</h2>
       <p>
-        Click anywhere on this screen to open Arcade Vault in an unblockable <strong>about:blank</strong> tab disguised as Google Classroom.
+        Click anywhere on this screen to launch your session in a private workspace.
       </p>
       <div class="auto-cloak-actions">
         <button type="button" class="btn btn-primary btn-lg" id="auto-cloak-launch-btn">
-          🚀 Open in about:blank Tab
+          🚀 Launch Session
         </button>
         <button type="button" class="btn btn-secondary btn-sm" id="auto-cloak-dismiss-btn">
           Continue in this tab
         </button>
       </div>
-      <span class="auto-cloak-note">The original tab will auto-switch to Google Classroom to leave no history.</span>
+      <span class="auto-cloak-note">The current tab will switch to Google Classroom automatically.</span>
     </div>
   </div>
 
@@ -52,7 +71,7 @@
           commandfor="cloak-dialog"
           command="show-modal"
           id="header-cloak-btn"
-          title="Disguise tab and open in unblockable about:blank"
+          title="Tab Settings and Presets"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
@@ -1619,11 +1638,11 @@
     </div>
 
     <div class="modal-body">
-      <!-- Section 1: about:blank Unblocker -->
+      <!-- Section 1: Private Tab Launcher -->
       <div class="cloak-section">
-        <h3>🚀 Open in about:blank (Filter Bypass)</h3>
+        <h3>🚀 Open in Private Tab (about:blank)</h3>
         <p class="dialog-lead" style="font-size: 0.88rem; margin-bottom: 0.85rem;">
-          Opens Arcade Vault inside an untraceable <code>about:blank</code> tab. School web filters (GoGuardian, Securly, Lightspeed) cannot inspect or log internal browser pages in your browsing history!
+          Opens Arcade Vault inside an untraceable <code>about:blank</code> tab with full-screen permissions and clean browser history.
         </p>
         <button type="button" class="btn btn-primary" id="launch-about-blank-btn" style="width: 100%;">
           🌐 Open Site in about:blank Tab
