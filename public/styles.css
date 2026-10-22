@@ -1927,6 +1927,77 @@ input.user-valid-fallback {
   flex-wrap: wrap;
 }
 
+/* Auto-Cloak 1-Click Splash Overlay */
+.auto-cloak-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(11, 13, 20, 0.94);
+  backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  cursor: pointer;
+}
+
+.auto-cloak-overlay[hidden] {
+  display: none !important;
+}
+
+.auto-cloak-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6), 0 0 40px var(--accent-glow);
+  padding: 2.25rem 2rem;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+  cursor: default;
+}
+
+.auto-cloak-icon {
+  font-size: 3.2rem;
+  margin-bottom: 0.85rem;
+}
+
+.auto-cloak-box h2 {
+  font-size: 1.6rem;
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+}
+
+.auto-cloak-box p {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 1.5rem 0;
+}
+
+.auto-cloak-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.auto-cloak-actions .btn-lg {
+  width: 100%;
+  padding: 0.85rem 1.5rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  border-radius: 9999px;
+}
+
+.auto-cloak-note {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 1rem;
+  opacity: 0.8;
+}
+
 /* Cloak & Stealth Modal */
 .cloak-modal {
   max-width: 580px;

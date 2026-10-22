@@ -4395,10 +4395,16 @@
   // Cloaking & Filter Bypass (about:blank & Tab Disguise)
   // ==========================================
   const launchAboutBlankBtn = document.getElementById('launch-about-blank-btn');
+  const autoBlankCheckbox = document.getElementById('auto-blank-checkbox');
+  const autoCloakOverlay = document.getElementById('auto-cloak-overlay');
+  const autoCloakLaunchBtn = document.getElementById('auto-cloak-launch-btn');
+  const autoCloakDismissBtn = document.getElementById('auto-cloak-dismiss-btn');
   const cloakPresetBtns = document.querySelectorAll('.cloak-preset-btn');
   const resetCloakBtn = document.getElementById('reset-cloak-btn');
   const panicKeySelect = document.getElementById('panic-key-select');
   const panicUrlSelect = document.getElementById('panic-url-select');
+
+  const isFramed = window.self !== window.top;
 
   const CLOAK_PRESETS = {
     classroom: {
@@ -4422,6 +4428,15 @@
   let activeCloakPreset = localStorage.getItem('arcade_cloak_preset') || null;
   let panicKey = localStorage.getItem('arcade_panic_key') || '`';
   let panicUrl = localStorage.getItem('arcade_panic_url') || 'https://classroom.google.com';
+  let autoBlankEnabled = localStorage.getItem('arcade_auto_blank') !== 'false';
+
+  if (autoBlankCheckbox) {
+    autoBlankCheckbox.checked = autoBlankEnabled;
+    autoBlankCheckbox.addEventListener('change', () => {
+      autoBlankEnabled = autoBlankCheckbox.checked;
+      localStorage.setItem('arcade_auto_blank', autoBlankEnabled ? 'true' : 'false');
+    });
+  }
 
   if (panicKeySelect) {
     panicKeySelect.value = panicKey;
@@ -4485,39 +4500,94 @@
     resetCloakBtn.addEventListener('click', resetTabCloak);
   }
 
-  // about:blank unblocker launcher
-  if (launchAboutBlankBtn) {
-    launchAboutBlankBtn.addEventListener('click', () => {
+  // Robust about:blank launcher
+  function openInAboutBlank(redirectDecoy = false) {
+    try {
       const win = window.open('about:blank', '_blank');
-      if (!win) {
-        alert('Popup was blocked by your browser. Please allow popups for this site to open in about:blank.');
-        return;
+      if (!win || win.closed || typeof win.closed === 'undefined') {
+        return false;
       }
-      const title = document.title || 'Classes';
-      const favicon = activeCloakPreset && CLOAK_PRESETS[activeCloakPreset] ? CLOAK_PRESETS[activeCloakPreset].favicon : 'https://ssl.gstatic.com/classroom/favicon.png';
+      const currentPreset = activeCloakPreset && CLOAK_PRESETS[activeCloakPreset] ? CLOAK_PRESETS[activeCloakPreset] : CLOAK_PRESETS.classroom;
+      const title = currentPreset.title || 'Classes';
+      const favicon = currentPreset.favicon || 'https://ssl.gstatic.com/classroom/favicon.png';
+      const targetUrl = window.location.href;
       const doc = win.document;
       doc.open();
       doc.write(`
         <!DOCTYPE html>
-        <html>
+        <html lang="en">
         <head>
           <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>${title}</title>
           <link rel="icon" href="${favicon}">
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0d14; }
-            iframe { width: 100%; height: 100%; border: none; outline: none; }
+            iframe { width: 100%; height: 100%; border: none; outline: none; display: block; }
           </style>
         </head>
         <body>
-          <iframe src="${window.location.href}" allow="fullscreen; autoplay; gamepad; cross-origin-isolated"></iframe>
+          <iframe src="${targetUrl}" allow="fullscreen; autoplay; gamepad; cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; display-capture"></iframe>
         </body>
         </html>
       `);
       doc.close();
-      const cloakDialog = document.getElementById('cloak-dialog');
-      if (cloakDialog && typeof cloakDialog.close === 'function') cloakDialog.close();
+
+      if (redirectDecoy) {
+        const decoyUrl = panicUrl || 'https://classroom.google.com';
+        window.location.replace(decoyUrl);
+      }
+      return true;
+    } catch (err) {
+      console.warn('about:blank launch blocked or failed:', err);
+      return false;
+    }
+  }
+
+  // Cloak modal about:blank button
+  if (launchAboutBlankBtn) {
+    if (isFramed) {
+      launchAboutBlankBtn.textContent = '🛡️ Running in about:blank';
+      launchAboutBlankBtn.classList.remove('btn-primary');
+      launchAboutBlankBtn.classList.add('btn-secondary');
+      launchAboutBlankBtn.disabled = true;
+    } else {
+      launchAboutBlankBtn.addEventListener('click', () => {
+        const opened = openInAboutBlank(false);
+        if (!opened) {
+          alert('Popup was blocked by your browser. Please allow popups for this site to open in about:blank.');
+        }
+        const cloakDialog = document.getElementById('cloak-dialog');
+        if (cloakDialog && typeof cloakDialog.close === 'function') cloakDialog.close();
+      });
+    }
+  }
+
+  // Auto-launch about:blank on site visit (only when top-level, enabled, and not dismissed)
+  const isDirectBypass = new URLSearchParams(window.location.search).has('direct');
+  if (!isFramed && autoBlankEnabled && !isDirectBypass && !sessionStorage.getItem('arcade_cloak_dismissed')) {
+    // Attempt immediate launch
+    const opened = openInAboutBlank(true);
+    if (!opened && autoCloakOverlay) {
+      // Browser popup blocker stopped automatic window.open without gesture.
+      // Reveal 1-click splash so user click immediately opens about:blank without pop-up blocking.
+      autoCloakOverlay.hidden = false;
+    }
+  }
+
+  if (autoCloakOverlay) {
+    autoCloakOverlay.addEventListener('click', (e) => {
+      if (e.target.closest('#auto-cloak-dismiss-btn')) return;
+      openInAboutBlank(true);
+    });
+  }
+
+  if (autoCloakDismissBtn) {
+    autoCloakDismissBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (autoCloakOverlay) autoCloakOverlay.hidden = true;
+      sessionStorage.setItem('arcade_cloak_dismissed', 'true');
     });
   }
 

@@ -12,6 +12,26 @@
   </script>
 </head>
 <body>
+  <!-- Auto-Cloak 1-Click Launch Splash (Shown if browser requires user gesture to open about:blank) -->
+  <div id="auto-cloak-overlay" class="auto-cloak-overlay" hidden>
+    <div class="auto-cloak-box">
+      <div class="auto-cloak-icon">🛡️</div>
+      <h2>Filter-Proof Launcher</h2>
+      <p>
+        Click anywhere on this screen to open Arcade Vault in an unblockable <strong>about:blank</strong> tab disguised as Google Classroom.
+      </p>
+      <div class="auto-cloak-actions">
+        <button type="button" class="btn btn-primary btn-lg" id="auto-cloak-launch-btn">
+          🚀 Open in about:blank Tab
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" id="auto-cloak-dismiss-btn">
+          Continue in this tab
+        </button>
+      </div>
+      <span class="auto-cloak-note">The original tab will auto-switch to Google Classroom to leave no history.</span>
+    </div>
+  </div>
+
   <header class="site-header">
     <div class="container header-inner">
       <a href="/" class="brand" aria-label="ArcadeVault Home">
@@ -1608,6 +1628,12 @@
         <button type="button" class="btn btn-primary" id="launch-about-blank-btn" style="width: 100%;">
           🌐 Open Site in about:blank Tab
         </button>
+        <div style="margin-top: 0.85rem; padding-top: 0.75rem; border-top: 1px solid var(--border-subtle);">
+          <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" id="auto-blank-checkbox" checked>
+            <span style="font-size: 0.88rem;"><strong>Auto-open in about:blank tab on every visit</strong></span>
+          </label>
+        </div>
       </div>
 
       <!-- Section 2: Tab Cloak Disguises -->
